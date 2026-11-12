@@ -9,7 +9,7 @@ import { CFG } from './config.js';
 import { fmtBytes, firstUrl, linkKind } from './logic.js';
 import { $, $$, esc, toast, busy, confirmBox, openSheet, layerCount } from './ui.js';
 
-const VERSION = '3a485bad4a';
+const VERSION = '73621c08d5';
 const TABS = { food, nails, edits };
 const mounted = new Set();
 let current = '';
@@ -68,7 +68,7 @@ async function settings(node) {
       <p class="hint">所有记录和图片都只存在这台手机的这个 App 里。换手机或删掉 App 前，记得导出备份。</p>
       <p>已用空间：${est ? fmtBytes(est.usage) : '—'}${persisted ? ' · 已锁定不被清理' : ''}　上次备份：${last ? new Date(last).toLocaleDateString() : '从未'}</p>
       <div class="row gap"><button class="btn ghost grow" data-a="export">导出备份</button><button class="btn ghost grow" data-a="import">导入备份</button></div></section>
-    <section class="box"><h3>ℹ️ 关于</h3><p class="hint">种草本 v${esc(VERSION)} · 地图 © OpenStreetMap / CARTO · 路线 OSRM${CFG.helper ? '' : ' · ⚠️ 链接读取服务未设置'}</p>
+    <section class="box"><h3>ℹ️ 关于</h3><p class="hint">种草本 v${esc(VERSION)} · 地图 © OpenStreetMap · 路线 OSRM${CFG.helper ? '' : ' · ⚠️ 链接读取服务未设置'}</p>
       <button class="link-btn" data-a="howto">怎么从小红书 / IG 加进来？</button></section>`;
   let shown = pick;
   node.onclick = async (e) => {

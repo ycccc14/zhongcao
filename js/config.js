@@ -14,7 +14,8 @@ export const CFG = {
   reverse: dev.reverse || 'https://nominatim.openstreetmap.org/reverse',
   osrmDrive: dev.osrmDrive || 'https://router.project-osrm.org/route/v1/driving/',
   osrmFoot: dev.osrmFoot || 'https://routing.openstreetmap.de/routed-foot/route/v1/driving/',
-  tiles: dev.tiles || 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  tilesAttr: '© OpenStreetMap © CARTO',
+  // CARTO tiles started needing an API key (2026-11); OpenStreetMap's own tiles are free with attribution.
+  tiles: dev.tiles || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  tilesAttr: '© OpenStreetMap',
   isDev: !!dev.helper,
 };
