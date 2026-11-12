@@ -124,7 +124,7 @@ main { padding-bottom: var(--tabs-h); min-height: 100%; }
 
 /* ---------- food ---------- */
 .food-body.map { position: relative; }
-.map-wrap { position: relative; height: 46vh; min-height: 280px; max-height: 520px; margin: 0 12px; border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); }
+.map-wrap { position: relative; isolation: isolate; height: 46vh; min-height: 280px; max-height: 520px; margin: 0 12px; border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); }
 .food-body.list .map-wrap { display: none; }
 .map-list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 18px 8px; font-size: 13px; }
 .map-list-head b { font-size: 15px; }
@@ -167,7 +167,11 @@ main { padding-bottom: var(--tabs-h); min-height: 100%; }
 /* detail pages */
 .page { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; flex-direction: column; animation: pageIn .22s ease; }
 .page.leaving { animation: pageOut .2s ease forwards; }
-.leaving { pointer-events: none; } /* a closing page/sheet never swallows the next tap */
+.leaving { pointer-events: none; }
+/* Leaflet's panes have z-index 200-800; keep them inside the map box so they never cover pages, sheets or headers. */
+.leaflet-container { isolation: isolate; z-index: 0; }
+.map-wrap, .mini-map, .picker-map { -webkit-transform: translateZ(0); transform: translateZ(0); }
+.covered .leaflet-container, .covered .map-tools { visibility: hidden; } /* see markCovered() in ui.js */ /* a closing page/sheet never swallows the next tap */
 @keyframes pageIn { from { transform: translateX(30%); opacity: 0; } }
 @keyframes pageOut { to { transform: translateX(30%); opacity: 0; } }
 .page-head { display: flex; align-items: center; gap: 6px; padding: calc(6px + var(--safe-t)) 10px 6px; border-bottom: 1px solid var(--line); background: var(--bg); }
@@ -206,7 +210,7 @@ ul.dishes .price { margin-left: auto; color: var(--brand); font-weight: 600; }
 ul.dishes small { width: 100%; color: var(--ink2); }
 .must { font-style: normal; font-size: 11px; background: var(--hot); color: #fff; padding: 0 6px; border-radius: 6px; }
 .addr { margin: 0 0 8px; }
-.mini-map { height: 150px; border-radius: 12px; overflow: hidden; margin: 6px 0 10px; }
+.mini-map { position: relative; isolation: isolate; height: 150px; border-radius: 12px; overflow: hidden; margin: 6px 0 10px; }
 .travel { display: grid; gap: 8px; margin-bottom: 10px; }
 .tr { display: flex; gap: 10px; align-items: center; background: var(--soft); border-radius: 12px; padding: 8px 10px; }
 .tr .emoji { font-size: 20px; }
@@ -247,7 +251,7 @@ ul.dishes small { width: 100%; color: var(--ink2); }
 .picker-results { max-height: 40%; overflow-y: auto; }
 .result { display: block; width: 100%; text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); }
 .result small { display: block; color: var(--ink2); font-size: 12px; }
-.picker-map { flex: 1; position: relative; min-height: 240px; }
+.picker-map { flex: 1; position: relative; isolation: isolate; min-height: 240px; }
 .picker-map .map { position: absolute; inset: 0; }
 .crosshair { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%); font-size: 34px; z-index: 500; pointer-events: none; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
 .picker-foot { display: flex; gap: 8px; padding: 10px 12px calc(10px + var(--safe-b)); }

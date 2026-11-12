@@ -41,12 +41,21 @@ export async function copy(text) {
 
 const layers = [];
 
+// iPhone Safari draws Leaflet maps (3D-transformed tiles in a clipped box) above fixed overlays, whatever the z-index.
+// So every map that sits under the top layer is hidden; it's covered anyway.
+function markCovered() {
+  const main = document.querySelector('main');
+  if (main) main.classList.toggle('covered', layers.length > 0);
+  layers.forEach((l, i) => l.node.classList.toggle('covered', i < layers.length - 1));
+}
+
 function pushLayer(node, onClose) {
   const layer = { node, onClose };
   layers.push(layer);
   // The newest layer is always on top: a page opened from a sheet (e.g. the map picker) must not hide behind it.
   node.style.zIndex = String(100 + layers.length * 10);
   history.pushState({ layer: layers.length }, '');
+  markCovered();
   return layer;
 }
 
@@ -54,6 +63,7 @@ function removeLayer(layer, fromPop) {
   const i = layers.indexOf(layer);
   if (i < 0) return;
   layers.splice(i, 1);
+  markCovered();
   layer.node.classList.add('leaving');
   setTimeout(() => layer.node.remove(), 220);
   if (layer.onClose) layer.onClose();
