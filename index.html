@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: data: https:; connect-src 'self' data: blob: https: http://127.0.0.1:*; worker-src 'self'; manifest-src 'self'">
+<meta name="theme-color" content="#fff7f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1717" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="种草本">
+<title>种草本</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="app.css">
+<script src="vendor/leaflet.js" defer></script>
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+<main>
+  <section class="view" id="view-food"></section>
+  <section class="view" id="view-nails" hidden></section>
+  <section class="view" id="view-edits" hidden></section>
+  <section class="view" id="view-settings" hidden></section>
+</main>
+<nav class="tabs" aria-label="页面">
+  <button class="tab" data-tab="food"><span>🍜</span>美食</button>
+  <button class="tab" data-tab="nails"><span>💅</span>美甲</button>
+  <button class="tab" data-tab="edits"><span>✨</span>修图口令</button>
+  <button class="tab" data-tab="settings"><span>⚙️</span>设置</button>
+</nav>
+<input type="file" id="file-input" hidden>
+<div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
