@@ -165,7 +165,7 @@ main { padding-bottom: var(--tabs-h); min-height: 100%; }
 .leaflet-container { font: inherit; }
 
 /* detail pages */
-.page { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; flex-direction: column; animation: pageIn .22s ease; }
+.page { position: fixed; inset: 0; z-index: 100; -webkit-transform: translateZ(0); transform: translateZ(0); background: var(--bg); display: flex; flex-direction: column; animation: pageIn .22s ease; }
 .page.leaving { animation: pageOut .2s ease forwards; }
 .leaving { pointer-events: none; }
 /* Leaflet's panes have z-index 200-800; keep them inside the map box so they never cover pages, sheets or headers. */
@@ -259,7 +259,8 @@ ul.dishes small { width: 100%; color: var(--ink2); }
 /* ---------- nails ---------- */
 .wall { columns: 2; column-gap: 8px; padding: 0 12px 16px; }
 .nail { position: relative; display: block; width: 100%; margin: 0 0 8px; break-inside: avoid; border-radius: 14px; overflow: hidden; background: var(--soft); box-shadow: var(--shadow); text-align: left; }
-.nail img { width: 100%; min-height: 80px; }
+/* iPhone '4:3' photos held upright: every tile is 3 wide by 4 tall, cropped to fill */
+.nail img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; object-position: center; }
 .nail span { display: block; padding: 6px 8px; font-size: 12px; background: var(--card); }
 .nail .heart { position: absolute; right: 6px; top: 6px; color: #ff4f6d; font-style: normal; font-size: 18px; text-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
 .nail .done { position: absolute; left: 6px; top: 6px; background: var(--ok); color: #fff; font-style: normal; font-size: 10px; padding: 1px 6px; border-radius: 6px; }
@@ -307,7 +308,7 @@ ol { padding-left: 20px; margin: 0; } ol li { margin-bottom: 4px; }
 .howto li { margin-bottom: 8px; }
 
 /* ---------- sheets, busy, toast ---------- */
-.sheet-wrap { position: fixed; inset: 0; z-index: 200; background: rgba(20, 10, 10, .4); display: flex; align-items: flex-end; animation: fade .2s; }
+.sheet-wrap { position: fixed; inset: 0; z-index: 200; -webkit-transform: translateZ(0); transform: translateZ(0); background: rgba(20, 10, 10, .4); display: flex; align-items: flex-end; animation: fade .2s; }
 .sheet-wrap.leaving { animation: fadeOut .2s forwards; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes fadeOut { to { opacity: 0; } }

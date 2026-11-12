@@ -41,12 +41,15 @@ export async function copy(text) {
 
 const layers = [];
 
-// iPhone Safari draws Leaflet maps (3D-transformed tiles in a clipped box) above fixed overlays, whatever the z-index.
-// So every map that sits under the top layer is hidden; it's covered anyway.
+// iPhone Safari has drawn Leaflet maps above fixed overlays whatever the z-index (see js/pre.js and app.css).
+// As a safety net, maps under a full-screen page or photo viewer are hidden: they can't be seen there anyway.
+// Under a half-transparent sheet the map stays visible behind the dimmed background.
 function markCovered() {
+  const opaque = (l) => l.node.classList.contains('page') || l.node.classList.contains('lb');
+  const coveredAt = (i) => layers.slice(i + 1).some(opaque);
   const main = document.querySelector('main');
-  if (main) main.classList.toggle('covered', layers.length > 0);
-  layers.forEach((l, i) => l.node.classList.toggle('covered', i < layers.length - 1));
+  if (main) main.classList.toggle('covered', coveredAt(-1));
+  layers.forEach((l, i) => l.node.classList.toggle('covered', coveredAt(i)));
 }
 
 function pushLayer(node, onClose) {

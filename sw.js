@@ -1,6 +1,6 @@
 // Offline copy of the app itself (not the map tiles or your data, which live in IndexedDB).
-const VERSION = 'aeafe8ed58';
-const FILES = ["./", "./app.css", "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable.png", "./index.html", "./js/ai.js", "./js/config.js", "./js/db.js", "./js/edits.js", "./js/food.js", "./js/img.js", "./js/importer.js", "./js/logic.js", "./js/main.js", "./js/nails.js", "./js/net.js", "./js/places.js", "./js/ui.js", "./manifest.webmanifest", "./vendor/anthropic.mjs", "./vendor/images/layers-2x.png", "./vendor/images/layers.png", "./vendor/images/marker-icon-2x.png", "./vendor/images/marker-icon.png", "./vendor/images/marker-shadow.png", "./vendor/leaflet.css", "./vendor/leaflet.js"];
+const VERSION = '122904d7f1';
+const FILES = ["./", "./app.css", "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable.png", "./index.html", "./js/ai.js", "./js/config.js", "./js/db.js", "./js/edits.js", "./js/food.js", "./js/img.js", "./js/importer.js", "./js/logic.js", "./js/main.js", "./js/nails.js", "./js/net.js", "./js/places.js", "./js/pre.js", "./js/ui.js", "./manifest.webmanifest", "./vendor/anthropic.mjs", "./vendor/images/layers-2x.png", "./vendor/images/layers.png", "./vendor/images/marker-icon-2x.png", "./vendor/images/marker-icon.png", "./vendor/images/marker-shadow.png", "./vendor/leaflet.css", "./vendor/leaflet.js"];
 const CACHE = `zhongcao-${VERSION}`;
 
 self.addEventListener('install', (e) => {
