@@ -9,7 +9,7 @@ import { CFG } from './config.js';
 import { fmtBytes, firstUrl, linkKind } from './logic.js';
 import { $, $$, esc, toast, busy, confirmBox, openSheet } from './ui.js';
 
-const VERSION = '70fc58b0dd';
+const VERSION = 'd9fc6c8ba8';
 const TABS = { food, nails, edits };
 const mounted = new Set();
 let current = '';

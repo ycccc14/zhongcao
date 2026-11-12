@@ -66,7 +66,14 @@ export async function gather(kind, { text, files }, step) {
   const videoBlobs = []; // the video files themselves (Gemini can watch & listen to small ones)
   if (text && firstUrl(text)) {
     step(`正在读取${SOURCE_LABEL[linkKind(firstUrl(text))] || ''}链接…`);
-    src = await net.readLink(text);
+    try {
+      src = await net.readLink(text);
+    } catch (e) {
+      // Link unreadable (e.g. rednote asks for login): carry on with the screenshots, keep the link as the source.
+      if (!files.length) throw e;
+      toast(`${e.message.split('。')[0]}，这次只用截图识别`, 3500);
+      src = { ok: true, kind: linkKind(firstUrl(text)), url: firstUrl(text), input: firstUrl(text), title: '', desc: '', tags: [], images: [], video: null, subtitles: '' };
+    }
     if (src.subtitles) src.subtitles = srtPlain(src.subtitles).slice(0, 8000);
     const urls = (src.images || []).slice(0, MAX_LINK_IMAGES);
     for (let i = 0; i < urls.length; i++) {
