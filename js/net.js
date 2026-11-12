@@ -12,7 +12,7 @@ async function getJson(url, opts) {
 
 export async function readLink(text) {
   const url = firstUrl(text);
-  if (!url) throw new Error('没有找到链接，请粘贴小红书/IG 的分享链接或整段分享文字');
+  if (!url) throw new Error('没有找到链接，请粘贴 Instagram / Google Maps 链接');
   if (!CFG.helper) throw new Error('链接读取服务还没设置好，暂时请用截图');
   let r;
   try {

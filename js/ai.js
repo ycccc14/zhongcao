@@ -1,7 +1,6 @@
 // Recognition. Two providers, both called straight from the phone with the user's own key:
-//   gemini (default): Google Gemini API free tier, through Google's official Gen AI SDK (web/vendor/genai.mjs)
-//   claude (optional, paid): Anthropic API, through the official Anthropic SDK (web/vendor/anthropic.mjs)
-// The SDKs are loaded only when first used.
+//   gemini (default): Google Gemini API free tier, plain REST generateContent (no SDK: less to go wrong on the phone)
+//   claude (optional, paid): Anthropic API, through the official Anthropic SDK (web/vendor/anthropic.mjs, loaded when first used)
 import { CFG } from './config.js';
 import { today, CUISINES, NAIL_COLORS, NAIL_STYLES, NAIL_SHAPES, NAIL_LENGTHS, NAIL_VIBES, SEASONS } from './logic.js';
 
@@ -10,11 +9,12 @@ export const PROVIDERS = {
     label: 'Google Gemini（免费）',
     keyUrl: 'https://aistudio.google.com/apikey',
     keyHint: 'AIza...',
+    // Tiers, not fixed model names: the newest model of the tier that this key can use is looked up from Google's list.
     models: {
-      'gemini-3.8-flash': { label: 'Gemini 3.8 Flash（最准，默认）', note: '免费；每天有次数上限，用完会自动换 Flash-Lite' },
-      'gemini-3.5-flash-lite': { label: 'Gemini 3.5 Flash-Lite（更快）', note: '免费；次数上限更宽松，密密麻麻的截图可能漏字' },
+      flash: { label: 'Gemini Flash（最准，默认）', note: '免费；每天有次数上限，用完会自动换 Flash-Lite' },
+      'flash-lite': { label: 'Gemini Flash-Lite（更快）', note: '免费；次数上限更宽松，密密麻麻的截图可能漏字' },
     },
-    fallback: 'gemini-3.5-flash-lite',
+    fallback: 'flash-lite',
   },
   claude: {
     label: 'Claude（付费，可选）',
@@ -29,6 +29,9 @@ export const PROVIDERS = {
 export const DEFAULT_PROVIDER = 'gemini';
 export const defaultModel = (p) => Object.keys(PROVIDERS[p].models)[0];
 export const VIDEO_INLINE_MAX = 11 * 1024 * 1024; // Gemini: the whole request must stay under 20 MB
+// Settings saved by the first version named exact models.
+const OLD_GEMINI = { 'gemini-3.8-flash': 'flash', 'gemini-3.5-flash-lite': 'flash-lite' };
+export const modelSetting = (p, m) => (p === 'gemini' && OLD_GEMINI[m] ? OLD_GEMINI[m] : m);
 
 // settings = {provider, keys: {gemini, claude}, models: {gemini, claude}}
 let settings = { provider: DEFAULT_PROVIDER, keys: {}, models: {} };
@@ -39,13 +42,90 @@ export function configure(s) {
 export const provider = () => (PROVIDERS[settings.provider] ? settings.provider : DEFAULT_PROVIDER);
 export const ready = () => !!settings.keys[provider()];
 export const takeNote = () => { const n = lastNote; lastNote = ''; return n; }; // e.g. "used Flash-Lite because the free quota ran out"
-const modelOf = (p) => (PROVIDERS[p].models[settings.models[p]] ? settings.models[p] : defaultModel(p));
+const modelOf = (p) => { const m = modelSetting(p, settings.models[p]); return PROVIDERS[p].models[m] ? m : defaultModel(p); };
 
-// ---------- Gemini ----------
+// ---------- Gemini (REST) ----------
 
-async function geminiClient(key) {
-  const { GoogleGenAI } = await import('../vendor/genai.mjs');
-  return new GoogleGenAI({ apiKey: key, httpOptions: CFG.geminiBase ? { baseUrl: CFG.geminiBase } : undefined });
+const geminiBase = () => `${CFG.geminiBase || 'https://generativelanguage.googleapis.com'}/v1beta`;
+
+class GeminiError extends Error {
+  constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+}
+
+async function geminiFetch(key, path, body) {
+  let res;
+  try {
+    res = await fetch(`${geminiBase()}/${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: { 'x-goog-api-key': key, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) {
+    throw new GeminiError(0, 'NETWORK', String((e && e.message) || e));
+  }
+  const text = await res.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch (e) { data = null; }
+  if (!res.ok) {
+    const er = (data && data.error) || {};
+    throw new GeminiError(res.status, er.status || '', er.message || text.slice(0, 200) || `HTTP ${res.status}`);
+  }
+  return data || {};
+}
+
+function geminiError(err) {
+  const status = (err && err.status) || 0;
+  const code = (err && err.code) || '';
+  const msg = String((err && err.message) || err);
+  if (/API key not valid|API_KEY_INVALID|invalid api key/i.test(msg) || status === 401) return { text: 'Gemini API key 不对，请到「设置」重新填写（要整串复制，开头是 AIza）' };
+  if (/location is not supported/i.test(msg)) return { text: '你所在的地区不能用 Gemini 免费版（Google 的限制）' };
+  if (status === 403 || code === 'PERMISSION_DENIED') return { text: `这个 Gemini key 没有权限：${msg.slice(0, 120)}` };
+  if (status === 429 || code === 'RESOURCE_EXHAUSTED') return { text: '今天的免费次数用完了，或请求太频繁；稍等一下或明天再试', quota: true };
+  if (status === 404 || code === 'NOT_FOUND') return { text: `找不到这个模型：${msg.slice(0, 120)}`, missing: true };
+  if (status === 400 && /schema|response_?json|enum|anyOf/i.test(msg)) return { text: msg.slice(0, 160), schema: true };
+  if (status >= 500) return { text: `Gemini 暂时出错了（${status}），稍后再试`, retry: true };
+  if (code === 'NETWORK') return { text: `连不上 Gemini，请检查网络（${msg.slice(0, 60)}）` };
+  return { text: `Gemini 出错了（${status || '?'}）：${msg.slice(0, 160)}` };
+}
+
+// Newest model of each tier that this key may call, from Google's own list (cached for the session).
+const TIER_RE = { flash: /^gemini-(\d+(?:\.\d+)?)-flash$/, 'flash-lite': /^gemini-(\d+(?:\.\d+)?)-flash-lite$/ };
+const TIER_ALIAS = { flash: 'gemini-flash-latest', 'flash-lite': 'gemini-flash-lite-latest' };
+const resolved = new Map(); // key -> Promise<{flash, 'flash-lite'}>
+export function pickModels(names) {
+  const out = {};
+  for (const [tier, re] of Object.entries(TIER_RE)) {
+    const best = names.map((n) => { const m = n.match(re); return m ? { n, v: parseFloat(m[1]) } : null; }).filter(Boolean).sort((a, b) => b.v - a.v)[0];
+    out[tier] = best ? best.n : names.includes(TIER_ALIAS[tier]) ? TIER_ALIAS[tier] : '';
+  }
+  if (!out.flash) out.flash = out['flash-lite'] || TIER_ALIAS.flash;
+  if (!out['flash-lite']) out['flash-lite'] = out.flash;
+  return out;
+}
+function geminiModels(key) {
+  if (!resolved.has(key)) {
+    resolved.set(key, (async () => {
+      try {
+        const data = await geminiFetch(key, 'models?pageSize=1000');
+        const names = (data.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent')).map((m) => String(m.name).replace(/^models\//, ''));
+        return pickModels(names);
+      } catch (e) {
+        resolved.delete(key);
+        if (e.status === 400 || e.status === 401 || e.status === 403) throw e; // bad key: say so
+        return { ...TIER_ALIAS };
+      }
+    })());
+  }
+  return resolved.get(key);
+}
+
+// Our content blocks (Claude's shape, plus our own {type:'video'}) -> Gemini parts.
+function geminiParts(content) {
+  return content.map((c) => {
+    if (c.type === 'text') return { text: c.text };
+    if (c.type === 'image' || c.type === 'video') return { inlineData: { mimeType: c.source.media_type, data: c.source.data } };
+    return null;
+  }).filter(Boolean);
 }
 
 // Gemini takes a JSON Schema subset; drop the keywords it doesn't need.
@@ -57,53 +137,47 @@ function geminiSchema(x) {
   return out;
 }
 
-// Our content blocks (Claude's shape, plus our own {type:'video'}) -> Gemini Interactions input.
-function geminiInput(content) {
-  return content.map((c) => {
-    if (c.type === 'text') return { type: 'text', text: c.text };
-    if (c.type === 'image') return { type: 'image', data: c.source.data, mime_type: c.source.media_type };
-    if (c.type === 'video') return { type: 'video', data: c.source.data, mime_type: c.source.media_type };
-    return null;
-  }).filter(Boolean);
-}
-
-function geminiError(err) {
-  const status = err && (err.status || err.code);
-  const msg = String((err && err.message) || err);
-  if (/API key not valid|API_KEY_INVALID|invalid api key/i.test(msg) || status === 401) return { text: 'Gemini API key 不对，请到「设置」重新填写' };
-  if (status === 403 || /PERMISSION_DENIED/.test(msg)) return { text: '这个 Gemini key 没有权限（可能所在地区不支持，或 key 被停用）' };
-  if (status === 429 || /RESOURCE_EXHAUSTED|quota/i.test(msg)) return { text: '今天的免费次数用完了，或请求太频繁；稍等一下或明天再试', quota: true };
-  if (status >= 500) return { text: `Gemini 暂时出错了（${status}），稍后再试`, retry: true };
-  if (!status && /fetch|network/i.test(msg)) return { text: '连不上 Gemini，请检查网络' };
-  return { text: `Gemini 出错了：${msg.slice(0, 120)}` };
-}
-
-async function askGemini({ system, content, schema, effort }) {
-  const ai = await geminiClient(settings.keys.gemini);
-  const params = (model) => ({
-    model,
-    input: geminiInput(content),
-    system_instruction: system,
-    response_format: { type: 'text', mime_type: 'application/json', schema: geminiSchema(schema) },
-    generation_config: { thinking_level: effort === 'low' ? 'low' : 'medium' },
-    store: false, // don't keep the conversation on Google's side
+async function geminiCall(key, model, { system, content, schema }, withSchema) {
+  const generationConfig = { responseMimeType: 'application/json' };
+  if (withSchema) generationConfig.responseJsonSchema = geminiSchema(schema);
+  // If Google rejects the schema, describe it in words instead.
+  const sys = withSchema ? system : `${system}\n\n只输出一个 JSON 对象，结构严格按照这个 JSON Schema：\n${JSON.stringify(geminiSchema(schema))}`;
+  const data = await geminiFetch(key, `models/${encodeURIComponent(model)}:generateContent`, {
+    systemInstruction: { parts: [{ text: sys }] },
+    contents: [{ role: 'user', parts: geminiParts(content) }],
+    generationConfig,
   });
-  let model = modelOf('gemini');
-  let res = null;
-  for (let attempt = 0; attempt < 4 && !res; attempt++) {
+  const cand = (data.candidates || [])[0];
+  if (!cand) {
+    const why = data.promptFeedback && data.promptFeedback.blockReason;
+    throw new Error(why ? `Gemini 拒绝识别这些图片（${why}），可以换几张试试` : 'Gemini 没有返回内容，请再试一次');
+  }
+  if (cand.finishReason === 'MAX_TOKENS') throw new Error('内容太多，识别被截断了；请少选几张图再试');
+  const text = ((cand.content && cand.content.parts) || []).filter((p) => p.text && !p.thought).map((p) => p.text).join('');
+  if (!text) throw new Error(cand.finishReason && cand.finishReason !== 'STOP' ? `Gemini 没有完成识别（${cand.finishReason}），可以换几张图试试` : 'Gemini 没有返回内容，请再试一次');
+  return text;
+}
+
+async function askGemini(req) {
+  const key = settings.keys.gemini;
+  let tier = modelOf('gemini');
+  let withSchema = true;
+  let triedAlias = false;
+  for (let attempt = 0; attempt < 6; attempt++) {
     try {
-      res = await ai.interactions.create(params(model));
+      const model = (await geminiModels(key))[tier];
+      return await geminiCall(key, model, req, withSchema);
     } catch (err) {
+      if (!(err instanceof GeminiError)) throw err;
       const e = geminiError(err);
-      if (e.quota && model !== PROVIDERS.gemini.fallback) { model = PROVIDERS.gemini.fallback; lastNote = '今天 Flash 的免费次数用完了，这次用 Flash-Lite 识别'; continue; }
-      if (e.retry && attempt < 2) { await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); continue; }
+      if (e.quota && tier !== PROVIDERS.gemini.fallback) { tier = PROVIDERS.gemini.fallback; lastNote = '今天 Flash 的免费次数用完了，这次用 Flash-Lite 识别'; continue; }
+      if (e.schema && withSchema) { withSchema = false; continue; }
+      if (e.missing && !triedAlias) { triedAlias = true; resolved.set(key, Promise.resolve({ ...TIER_ALIAS })); continue; }
+      if (e.retry && attempt < 3) { await new Promise((r) => setTimeout(r, 1500 * (attempt + 1))); continue; }
       throw new Error(e.text);
     }
   }
-  if (res.status && res.status !== 'completed') {
-    throw new Error(res.status === 'incomplete' ? '内容太多，识别被截断了；请少选几张图再试' : `识别没有完成（${res.status}），请再试一次`);
-  }
-  return res.output_text || '';
+  throw new Error('Gemini 一直没有回应，请稍后再试');
 }
 
 // ---------- Claude ----------
@@ -153,21 +227,23 @@ export async function ask(req) {
   }
 }
 
-// Checks a key with a tiny request. Returns '' when it works, otherwise a message.
+// Checks a key with a tiny request. Returns {error: '' when it works, otherwise a message; model: the model used}.
 export async function testKey(p, key, model) {
   try {
     if (p === 'gemini') {
-      const ai = await geminiClient(key);
-      await ai.interactions.create({ model: model || defaultModel('gemini'), input: 'Reply OK', generation_config: { thinking_level: 'minimal' }, store: false });
-    } else {
-      const { default: Anthropic } = await import('../vendor/anthropic.mjs');
-      await new Anthropic({ apiKey: key, baseURL: CFG.aiBase, dangerouslyAllowBrowser: true, maxRetries: 0, timeout: 30000 })
-        .messages.create({ model: model || defaultModel('claude'), max_tokens: 16, output_config: { effort: 'low' }, messages: [{ role: 'user', content: 'Reply OK' }] });
+      resolved.delete(key);
+      const tier = PROVIDERS.gemini.models[modelSetting(p, model)] ? modelSetting(p, model) : defaultModel('gemini');
+      const name = (await geminiModels(key))[tier];
+      await geminiFetch(key, `models/${encodeURIComponent(name)}:generateContent`, { contents: [{ role: 'user', parts: [{ text: 'Reply OK' }] }] });
+      return { error: '', model: name };
     }
-    return '';
+    const { default: Anthropic } = await import('../vendor/anthropic.mjs');
+    await new Anthropic({ apiKey: key, baseURL: CFG.aiBase, dangerouslyAllowBrowser: true, maxRetries: 0, timeout: 30000 })
+      .messages.create({ model: model || defaultModel('claude'), max_tokens: 16, output_config: { effort: 'low' }, messages: [{ role: 'user', content: 'Reply OK' }] });
+    return { error: '', model: model || defaultModel('claude') };
   } catch (err) {
-    if (p === 'gemini') return geminiError(err).text;
-    return /401|auth/i.test(String(err && (err.status || err.message))) ? 'Claude API key 不对或已失效' : String((err && err.message) || err).slice(0, 120);
+    if (p === 'gemini') return { error: err instanceof GeminiError ? geminiError(err).text : String((err && err.message) || err).slice(0, 160) };
+    return { error: /401|auth/i.test(String(err && (err.status || err.message))) ? 'Claude API key 不对或已失效' : String((err && err.message) || err).slice(0, 120) };
   }
 }
 

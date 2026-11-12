@@ -1,8 +1,11 @@
-// The "add" sheet shared by all three pages: paste a link and/or choose screenshots/videos,
+// The "add" sheet shared by all three pages: paste an Instagram / Google Maps link and/or choose screenshots/videos,
 // then gather everything into pictures the AI can look at and the app can save at full size.
 import * as net from './net.js';
 import * as img from './img.js';
 import { firstUrl, linkKind, SOURCE_LABEL, srtPlain } from './logic.js';
+
+// 小红书 links can't be read (rednote shows a login page to the helper), so they are only kept as the source.
+const isXhs = (text) => linkKind(firstUrl(text)) === 'xhs';
 import { el, esc, $, openSheet, toast, pickFiles } from './ui.js';
 
 const TEXT = {
@@ -19,15 +22,21 @@ export function openImport(kind, onGo, onManual, preset) {
   const t = TEXT[kind];
   let files = [];
   openSheet(t.title, (box, sheet) => {
-    box.innerHTML = `<div class="paste"><textarea rows="3" placeholder="粘贴小红书 / Instagram 的分享链接或整段分享文字">${esc(preset || '')}</textarea>
-        <button class="btn small ghost" data-a="paste">粘贴</button></div>
-      <div class="or">或者 / 同时</div>
-      <button class="btn ghost wide" data-a="files">📷 ${t.files}</button>
+    box.innerHTML = `<button class="btn ghost wide" data-a="files">📷 ${t.files}</button>
       <div class="picked"></div>
+      <p class="hint">小红书：直接截图（可以多选几张），在这里选截图。</p>
+      <div class="or">或者 / 同时</div>
+      <div class="paste"><textarea rows="2" placeholder="粘贴 Instagram / Google Maps 链接（可不填）">${esc(preset || '')}</textarea>
+        <button class="btn small ghost" data-a="paste">粘贴</button></div>
+      <p class="hint warn xhs-note" hidden>小红书链接读不到内容（要登录），请截图后点上面「${t.files}」。链接会存成来源。</p>
       <button class="btn wide" data-a="go">✨ 开始识别</button>
       ${t.manual ? `<button class="link-btn" data-a="manual">${t.manual}</button>` : ''}`;
     const ta = $('textarea', box);
     const picked = $('.picked', box);
+    const note = $('.xhs-note', box);
+    const checkXhs = () => { note.hidden = !isXhs(ta.value); };
+    ta.addEventListener('input', checkXhs);
+    checkXhs();
     const drawPicked = () => {
       picked.innerHTML = files.map((f, i) => {
         const u = URL.createObjectURL(f);
@@ -42,7 +51,7 @@ export function openImport(kind, onGo, onManual, preset) {
       const a = e.target.closest('[data-a]');
       if (!a) return;
       if (a.dataset.a === 'paste') {
-        try { ta.value = await navigator.clipboard.readText(); } catch (err) { toast('请长按输入框选择「粘贴」'); ta.focus(); }
+        try { ta.value = await navigator.clipboard.readText(); checkXhs(); } catch (err) { toast('请长按输入框选择「粘贴」'); ta.focus(); }
       }
       if (a.dataset.a === 'files') { files = files.concat(await pickFiles(t.accept, true)); drawPicked(); }
       if (a.dataset.a === 'manual') { sheet.close(); onManual(); }
@@ -50,6 +59,7 @@ export function openImport(kind, onGo, onManual, preset) {
         const text = ta.value.trim();
         if (!text && !files.length) { toast('请粘贴链接或选择图片'); return; }
         if (text && !firstUrl(text) && !files.length) { toast('没找到链接'); return; }
+        if (isXhs(text) && !files.length) { toast('小红书链接读不到，请先选截图', 3500); checkXhs(); return; }
         sheet.close();
         onGo({ text, files: files.slice() });
       }
@@ -64,12 +74,14 @@ export async function gather(kind, { text, files }, step) {
   const pics = [];
   const videos = [];
   const videoBlobs = []; // the video files themselves (Gemini can watch & listen to small ones)
-  if (text && firstUrl(text)) {
+  if (text && isXhs(text)) {
+    src = { ok: true, kind: 'xhs', url: firstUrl(text), input: firstUrl(text), title: '', desc: '', tags: [], images: [], video: null, subtitles: '' };
+  } else if (text && firstUrl(text)) {
     step(`正在读取${SOURCE_LABEL[linkKind(firstUrl(text))] || ''}链接…`);
     try {
       src = await net.readLink(text);
     } catch (e) {
-      // Link unreadable (e.g. rednote asks for login): carry on with the screenshots, keep the link as the source.
+      // Link unreadable (e.g. a private Instagram post): carry on with the screenshots, keep the link as the source.
       if (!files.length) throw e;
       toast(`${e.message.split('。')[0]}，这次只用截图识别`, 3500);
       src = { ok: true, kind: linkKind(firstUrl(text)), url: firstUrl(text), input: firstUrl(text), title: '', desc: '', tags: [], images: [], video: null, subtitles: '' };

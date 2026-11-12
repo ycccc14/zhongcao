@@ -44,6 +44,8 @@ const layers = [];
 function pushLayer(node, onClose) {
   const layer = { node, onClose };
   layers.push(layer);
+  // The newest layer is always on top: a page opened from a sheet (e.g. the map picker) must not hide behind it.
+  node.style.zIndex = String(100 + layers.length * 10);
   history.pushState({ layer: layers.length }, '');
   return layer;
 }

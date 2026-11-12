@@ -7,9 +7,9 @@ import * as nails from './nails.js';
 import * as edits from './edits.js';
 import { CFG } from './config.js';
 import { fmtBytes, firstUrl, linkKind } from './logic.js';
-import { $, $$, esc, toast, busy, confirmBox, openSheet } from './ui.js';
+import { $, $$, esc, toast, busy, confirmBox, openSheet, layerCount } from './ui.js';
 
-const VERSION = 'd9fc6c8ba8';
+const VERSION = '3a485bad4a';
 const TABS = { food, nails, edits };
 const mounted = new Set();
 let current = '';
@@ -38,7 +38,7 @@ async function aiSettings() {
   return {
     provider: await db.getKv('aiProvider', legacy ? 'claude' : ai.DEFAULT_PROVIDER),
     keys: { gemini: await db.getKv('geminiKey', ''), claude: await db.getKv('claudeKey', legacy) },
-    models: { gemini: await db.getKv('geminiModel', ai.defaultModel('gemini')), claude: await db.getKv('claudeModel', await db.getKv('aiModel', ai.defaultModel('claude'))) },
+    models: { gemini: ai.modelSetting('gemini', await db.getKv('geminiModel', ai.defaultModel('gemini'))), claude: await db.getKv('claudeModel', await db.getKv('aiModel', ai.defaultModel('claude'))) },
   };
 }
 
@@ -69,7 +69,7 @@ async function settings(node) {
       <p>已用空间：${est ? fmtBytes(est.usage) : '—'}${persisted ? ' · 已锁定不被清理' : ''}　上次备份：${last ? new Date(last).toLocaleDateString() : '从未'}</p>
       <div class="row gap"><button class="btn ghost grow" data-a="export">导出备份</button><button class="btn ghost grow" data-a="import">导入备份</button></div></section>
     <section class="box"><h3>ℹ️ 关于</h3><p class="hint">种草本 v${esc(VERSION)} · 地图 © OpenStreetMap / CARTO · 路线 OSRM${CFG.helper ? '' : ' · ⚠️ 链接读取服务未设置'}</p>
-      <button class="link-btn" data-a="howto">怎么从小红书分享过来？</button></section>`;
+      <button class="link-btn" data-a="howto">怎么从小红书 / IG 加进来？</button></section>`;
   let shown = pick;
   node.onclick = async (e) => {
     const pv = e.target.closest('[data-prov]');
@@ -86,9 +86,9 @@ async function settings(node) {
     if (a.dataset.a === 'test') {
       if (!k) { toast('请先贴上 API key'); return; }
       const w = busy('测试中…');
-      const err = await ai.testKey(shown, k, m);
+      const r = await ai.testKey(shown, k, m);
       w.done();
-      toast(err || '可以用 ✓', 3500);
+      toast(r.error || `可以用 ✓（${r.model}）`, r.error ? 6000 : 3500);
     }
     if (a.dataset.a === 'save-key') {
       await db.setKv('aiProvider', shown);
@@ -107,10 +107,10 @@ async function settings(node) {
 
 function howto() {
   openSheet('从小红书 / IG 加进来', (box) => {
-    box.innerHTML = `<ol class="howto"><li>在小红书笔记里点右上角「分享」→「复制链接」。</li>
-      <li>回到种草本，点对应页面右上角的「＋」，按「粘贴」，再按「开始识别」。</li>
-      <li>也可以直接截图，在「＋」里选截图；视频可以录屏后选视频。</li>
-      <li>IG：帖子右上角「⋯」→「复制链接」。私人账号读不到，用截图就好。</li></ol>
+    box.innerHTML = `<ol class="howto"><li>小红书：把笔记截图（图片、正文、评论里的地址都可以截，多截几张更准）。视频可以录屏。</li>
+      <li>回到种草本，点对应页面右上角的「＋」，选截图 / 录屏，再按「开始识别」。</li>
+      <li>IG：帖子右上角「⋯」→「复制链接」，贴到「＋」里。私人账号读不到，用截图就好。</li>
+      <li>小红书链接读不到内容（小红书要求登录），所以只能用截图。</li></ol>
       <p class="hint">识别完会让你检查一遍再保存。图片会存在手机里，原笔记删了也看得到。</p>`;
   });
 }
@@ -210,10 +210,38 @@ async function start() {
     if (kind) TABS[target].startAdd(shared);
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator && !CFG.isDev && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  watchUpdates();
   document.body.classList.add('ready');
+  try { if (sessionStorage.getItem('zc-updated')) { sessionStorage.removeItem('zc-updated'); toast('已更新到最新版本 ✓', 3000); } } catch (e) { /* private mode */ }
 }
 
+// ---------- updates ----------
+// Each time the app opens or comes back to the front it asks for the newest version. The new version installs in the
+// background and then the app reloads into it, unless something is open (a form, a sheet), in which case it waits.
+function watchUpdates() {
+  if (!('serviceWorker' in navigator) || CFG.isDev || location.protocol !== 'https:') return;
+  const hadController = !!navigator.serviceWorker.controller;
+  let pending = false;
+  let reloading = false;
+  const reload = () => {
+    if (reloading) return;
+    if (layerCount() || document.querySelector('.busy')) { pending = true; return; }
+    reloading = true;
+    try { sessionStorage.setItem('zc-updated', '1'); } catch (e) { /* private mode */ }
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) reload(); });
+  window.addEventListener('popstate', () => { if (pending) setTimeout(reload, 300); }); // a page/sheet was closed
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (pending) reload(); else reg.update().catch(() => {});
+    });
+  }).catch(() => {});
+}
+
+// iPhone ignores user-scalable=no; block its pinch-zoom gestures on the page (Leaflet and the photo viewer use pointer events).
+for (const t of ['gesturestart', 'gesturechange']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
 window.addEventListener('error', (e) => { if (e.message && !/ResizeObserver/.test(e.message)) toast(`出错了：${e.message}`, 4000); });
 window.addEventListener('unhandledrejection', (e) => { const m = e.reason && e.reason.message; if (m) toast(`出错了：${m}`, 4000); });
 start();

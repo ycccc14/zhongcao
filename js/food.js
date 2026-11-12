@@ -85,22 +85,24 @@ async function render() {
   if (base) list.sort((a, b) => (km(base, a) ?? 1e9) - (km(base, b) ?? 1e9));
   else list.sort((a, b) => b.created - a.created);
 
-  if (!foods.length) {
-    body.innerHTML = `<div class="empty-state"><div class="big">🍜</div><p>还没有收藏的店</p>
-      <p class="hint">在小红书看到想吃的，复制链接或截图，点右上角「＋」。AI 会整理出菜系、地址、价格、推荐菜和优惠，放到地图上。</p>
+  const firstTime = `<div class="empty-state"><div class="big">🍜</div><p>还没有收藏的店</p>
+      <p class="hint">在小红书 / IG 看到想吃的，截图（可以多选几张），点右上角「＋」。AI 会整理出菜系、地址、价格、推荐菜和优惠，放到地图上。</p>
       <button class="btn" data-a="add">＋ 添加第一家</button>${ps.length ? '' : '<br><button class="link-btn" data-a="places">先设置家 / 学校 / 公司的位置</button>'}</div>`;
-  } else if (ui.view === 'map') {
+  if (ui.view === 'map') {
+    // The map is always there, even before the first place is saved (it shows home/school/work).
     const unplaced = list.filter((f) => f.lat == null);
     body.innerHTML = `<div class="map-wrap"><div class="map"></div>
       <div class="map-tools"><button class="icon-btn" data-a="fit" aria-label="显示全部">⤢</button><button class="icon-btn" data-a="me" aria-label="我的位置">◎</button></div></div>
-      <div class="map-list-head"><b class="in-view"></b><span class="muted">${base ? `按离${esc(base.name)}的距离` : '最新的在前'}</span></div>
+      ${foods.length ? `<div class="map-list-head"><b class="in-view"></b><span class="muted">${base ? `按离${esc(base.name)}的距离` : '最新的在前'}</span></div>
       <div class="cards map-list"></div>
-      ${unplaced.length ? `<details class="unplaced-box"><summary>${unplaced.length} 家还没定位（不在地图上）</summary><div class="cards">${unplaced.map((f) => card(f, base, on)).join('')}</div></details>` : ''}`;
+      ${unplaced.length ? `<details class="unplaced-box"><summary>${unplaced.length} 家还没定位（不在地图上）</summary><div class="cards">${unplaced.map((f) => card(f, base, on)).join('')}</div></details>` : ''}` : firstTime}`;
     fillThumbs(body);
     drawMap($('.map', body), list, ps, base);
+  } else if (!foods.length) {
+    body.innerHTML = firstTime;
   } else {
     body.innerHTML = list.length ? `<div class="cards">${list.map((f) => card(f, base, on)).join('')}</div>`
-      : `<div class="empty-state"><div class="big">🍜</div><p>没有符合条件的店</p><button class="btn" data-a="add">＋ 从小红书/截图添加</button></div>`;
+      : `<div class="empty-state"><div class="big">🍜</div><p>没有符合条件的店</p><button class="btn" data-a="add">＋ 从截图添加</button></div>`;
     fillThumbs(body);
   }
   bind();
@@ -155,6 +157,7 @@ async function drawMap(node, list, ps, base) {
     const inView = placed.filter((f) => bounds.contains([f.lat, f.lng]));
     const box = $('.map-list', root);
     if (!box) return;
+    if (!$('.in-view', root)) return;
     $('.in-view', root).textContent = inView.length ? `地图范围内 ${inView.length} 家` : '地图范围内没有店，拖动或缩小地图看看';
     box.innerHTML = inView.map((f) => card(f, base, on)).join('');
     fillThumbs(box);

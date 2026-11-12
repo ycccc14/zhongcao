@@ -24,6 +24,9 @@ body {
 }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 input, textarea, select { font: inherit; color: var(--ink); }
+/* No page zoom: no double-tap zoom, and 16px inputs so iPhone doesn't zoom in when typing. Map and photo viewer keep their own zoom. */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+input, textarea, select { font-size: 16px !important; }
 a { color: var(--brand); }
 img { display: block; max-width: 100%; }
 [hidden] { display: none !important; }
@@ -164,6 +167,7 @@ main { padding-bottom: var(--tabs-h); min-height: 100%; }
 /* detail pages */
 .page { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; flex-direction: column; animation: pageIn .22s ease; }
 .page.leaving { animation: pageOut .2s ease forwards; }
+.leaving { pointer-events: none; } /* a closing page/sheet never swallows the next tap */
 @keyframes pageIn { from { transform: translateX(30%); opacity: 0; } }
 @keyframes pageOut { to { transform: translateX(30%); opacity: 0; } }
 .page-head { display: flex; align-items: center; gap: 6px; padding: calc(6px + var(--safe-t)) 10px 6px; border-bottom: 1px solid var(--line); background: var(--bg); }

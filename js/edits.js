@@ -40,7 +40,7 @@ function render() {
       <div class="ebody"><button class="etitle" data-open="${e.id}"><b>${esc(e.title || '口令')}</b>${e.tool ? `<em>${esc(e.tool)}</em>` : ''}</button>
         ${(e.prompts || []).slice(0, 1).map((p) => `<p class="eprompt">${esc(p.text)}</p>`).join('')}
         <button class="copy-btn" data-copy="${e.id}">复制口令${(e.prompts || []).length > 1 ? `（${e.prompts.length} 段）` : ''}</button></div></div>`).join('')}</div>
-    ${!list.length ? `<div class="empty-state"><div class="big">✨</div><p>${edits.length ? '没有符合的口令' : '把小红书/IG 的修图口令截图、链接或视频丢进来，AI 会只留下口令和前后对比图'}</p><button class="btn" data-a="add">＋ 添加口令</button></div>` : ''}`;
+    ${!list.length ? `<div class="empty-state"><div class="big">✨</div><p>${edits.length ? '没有符合的口令' : '把小红书/IG 的修图口令截图、录屏或 IG 链接丢进来，AI 会只留下口令和前后对比图'}</p><button class="btn" data-a="add">＋ 添加口令</button></div>` : ''}`;
   (async () => { for (const im of $$('img[data-img]', root)) im.src = await img.url(im.dataset.img, 'thumb'); })();
 
   root.onclick = (ev) => {
