@@ -40,6 +40,10 @@ img { display: block; max-width: 100%; }
 .pre { white-space: pre-wrap; word-break: break-word; }
 
 main { padding-bottom: var(--tabs-h); min-height: 100%; }
+/* Never wider than the phone: grids may shrink below their content, and anything still too wide is clipped (clip keeps sticky headers working). */
+html, body, main { overflow-x: clip; max-width: 100%; }
+.cards, .ecards, .list, .travel, .promo-edit, .prompt-edit { grid-template-columns: minmax(0, 1fr); }
+.view > * { min-width: 0; }
 .view { min-height: calc(100vh - var(--tabs-h)); }
 
 /* ---------- tab bar ---------- */
@@ -143,12 +147,13 @@ main { padding-bottom: var(--tabs-h); min-height: 100%; }
 .map-card .fcard { margin: 0; }
 .unplaced { position: absolute; left: 10px; top: 10px; z-index: 500; background: var(--card); padding: 6px 12px; border-radius: 999px; font-size: 12px; box-shadow: var(--shadow); }
 .cards { padding: 0 16px 16px; display: grid; gap: 10px; }
-.fcard { display: flex; gap: 12px; text-align: left; background: var(--card); border-radius: var(--radius); padding: 10px; box-shadow: var(--shadow); width: 100%; }
+.fcard { display: flex; gap: 12px; text-align: left; background: var(--card); border-radius: var(--radius); padding: 10px; box-shadow: var(--shadow); width: 100%; min-width: 0; max-width: 100%; overflow: hidden; }
 .fthumb { position: relative; width: 92px; height: 92px; border-radius: 12px; overflow: hidden; flex: none; background: var(--soft); display: grid; place-items: center; font-size: 32px; }
 .fthumb img { width: 100%; height: 100%; object-fit: cover; }
 .fthumb .been { position: absolute; left: 4px; top: 4px; background: var(--ok); color: #fff; font-size: 10px; font-style: normal; padding: 1px 6px; border-radius: 6px; }
 .finfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-.finfo b { font-size: 16px; line-height: 1.3; }
+.finfo b { font-size: 16px; line-height: 1.3; overflow-wrap: anywhere; }
+.finfo .meta { overflow-wrap: anywhere; }
 .finfo b small { font-weight: 400; color: var(--ink2); font-size: 12px; }
 .finfo .meta, .finfo .meta2 { font-size: 12px; color: var(--ink2); }
 .finfo .dishes { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -240,7 +245,7 @@ ul.dishes small { width: 100%; color: var(--ink2); }
 
 /* places & picker */
 .list { display: grid; gap: 8px; margin-bottom: 14px; }
-.item { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 10px 12px; text-align: left; box-shadow: var(--shadow); width: 100%; }
+.item { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: 14px; padding: 10px 12px; text-align: left; box-shadow: var(--shadow); width: 100%; min-width: 0; }
 .item small { display: block; color: var(--ink2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item .emoji { font-size: 22px; }
 .chev { color: var(--ink2); font-size: 20px; }
