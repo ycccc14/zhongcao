@@ -254,10 +254,12 @@ export const NAIL_LENGTHS = ['短', '中', '长'];
 export const NAIL_VIBES = ['温柔', '日常通勤', '高级感', '显白', '甜美', '甜酷', '可爱', '复古', '清冷', '活泼', '仙女', '酷/个性', '婚礼/约会'];
 export const SEASONS = ['春', '夏', '秋', '冬'];
 
-export function nailFromAi(r, imageId) {
+// One nail design = one record with one or more photos: images [id…]; image = images[0] (older records only have image).
+export function nailFromAi(r, imageIds) {
   const pick = (v, list) => (list.includes(v) ? v : '');
+  const images = [].concat(imageIds || []).filter(Boolean);
   return {
-    id: uid(), image: imageId,
+    id: uid(), image: images[0] || '', images,
     title: r.title || '',
     color: NAIL_COLORS[r.color_family] ? r.color_family : '',
     colors: (r.colors || []).filter((c) => c && /^#[0-9a-f]{6}$/i.test(c.hex)).slice(0, 4),
@@ -268,6 +270,64 @@ export function nailFromAi(r, imageId) {
     seasons: (r.seasons || []).filter((s) => SEASONS.includes(s)),
     note: r.note || '', fav: false, done: false, sources: [],
     created: Date.now(), updated: Date.now(), ai: true,
+  };
+}
+
+export const nailImages = (n) => (n.images && n.images.length ? n.images : n.image ? [n.image] : []);
+
+const titleKey = (t) => String(t || '').replace(/[\s·・,，。.!！~～|｜/\\-]+/g, '').toLowerCase();
+
+// Photos of one upload → designs. items: [{ batch, r }] in upload order (r = the AI's answer for that photo, or null).
+// Same design number in the same AI batch → one design; designs with the same title are one design too
+// (a batch boundary can split them). Returns arrays of item indexes, in upload order.
+export function groupNails(items) {
+  const groups = [];
+  const byKey = new Map();
+  items.forEach((it, i) => {
+    const r = it && it.r;
+    const keys = [];
+    if (r && Number.isInteger(r.design) && r.design >= 0) keys.push(`d:${it.batch}:${r.design}`);
+    if (r && titleKey(r.title)) keys.push(`t:${titleKey(r.title)}`);
+    const g = keys.map((k) => byKey.get(k)).find(Boolean);
+    const group = g || [];
+    if (!g) groups.push(group);
+    group.push(i);
+    for (const k of keys) if (!byKey.has(k)) byKey.set(k, group);
+  });
+  return groups;
+}
+
+// Older versions saved every photo of an upload as its own design, so one design showed up twice with the
+// same name. Records with the same title, from the same source, saved within 10 minutes of each other are
+// one design: returns [{ keep, merged: [records folded into keep] }] for the groups that need merging.
+export function sameNailGroups(nails) {
+  const sorted = [...nails].sort((a, b) => (a.created || 0) - (b.created || 0));
+  const out = [];
+  const used = new Set();
+  for (const a of sorted) {
+    if (used.has(a.id) || !titleKey(a.title)) continue;
+    const src = ((a.sources || [])[0] || {}).url || '';
+    const merged = sorted.filter((b) => b !== a && !used.has(b.id) && titleKey(b.title) === titleKey(a.title)
+      && (((b.sources || [])[0] || {}).url || '') === src && Math.abs((b.created || 0) - (a.created || 0)) < 10 * 60 * 1000);
+    if (!merged.length) continue;
+    used.add(a.id);
+    merged.forEach((b) => used.add(b.id));
+    out.push({ keep: a, merged });
+  }
+  return out;
+}
+
+// Folds the photos and flags of `others` into `keep` (returns a new record).
+export function mergeNails(keep, others) {
+  const images = [...nailImages(keep)];
+  for (const o of others) for (const id of nailImages(o)) if (!images.includes(id)) images.push(id);
+  const list = (k) => [...new Set([keep, ...others].flatMap((n) => n[k] || []))];
+  return {
+    ...keep, images, image: images[0] || '', fav: [keep, ...others].some((n) => n.fav), done: [keep, ...others].some((n) => n.done),
+    styles: keep.styles && keep.styles.length ? keep.styles : list('styles'), vibes: keep.vibes && keep.vibes.length ? keep.vibes : list('vibes'),
+    seasons: keep.seasons && keep.seasons.length ? keep.seasons : list('seasons'),
+    sources: [...new Map([keep, ...others].flatMap((n) => n.sources || []).map((s) => [s.url || JSON.stringify(s), s])).values()],
+    updated: Date.now(),
   };
 }
 

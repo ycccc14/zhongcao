@@ -208,8 +208,9 @@ async function runImport(input) {
     if (!effects.length) { toast('没找到口令。可以手动添加', 3500); release(g); return; }
     review(effects.map((x) => ({
       title: x.title, tool: normalizeTool(res.tool), prompts: x.prompts.filter((p) => p.text.trim()), steps: x.steps || [], tips: x.tips || '', tags: x.tags || [],
-      before: x.before.image >= 0 && x.before.image < g.pics.length ? { i: x.before.image, box: normBox(x.before.box) } : null,
-      after: x.after.image >= 0 && x.after.image < g.pics.length ? { i: x.after.image, box: normBox(x.after.box) } : null,
+      // AI box, or else the auto-crop (a 小红书 screenshot → just its picture)
+      before: x.before.image >= 0 && x.before.image < g.pics.length ? { i: x.before.image, box: normBox(x.before.box) || g.pics[x.before.image].autoBox } : null,
+      after: x.after.image >= 0 && x.after.image < g.pics.length ? { i: x.after.image, box: normBox(x.after.box) || g.pics[x.after.image].autoBox } : null,
     })), g);
   } catch (e) {
     w.done();
@@ -249,7 +250,7 @@ function review(effects, g) {
         if (a && a.dataset.a === 'add-prompt') addPromptRow($('.prompts', node), { label: '', text: '' });
         if (a && a.dataset.a === 'rm-prompt') a.closest('.prompt-edit').remove();
         const sw = ev.target.closest('[data-swap]');
-        if (sw) { const i = await choosePic(g.pics, fx[sw.dataset.swap] ? fx[sw.dataset.swap].i : -1); if (i != null) { fx[sw.dataset.swap] = { i, box: null }; drawSlot(sw.dataset.swap); } }
+        if (sw) { const i = await choosePic(g.pics, fx[sw.dataset.swap] ? fx[sw.dataset.swap].i : -1); if (i != null) { fx[sw.dataset.swap] = { i, box: g.pics[i].autoBox }; drawSlot(sw.dataset.swap); } }
         const cr = ev.target.closest('[data-crop]');
         if (cr) { const s = fx[cr.dataset.crop]; const box = await cropEditor(g.pics[s.i].previewUrl, s.box); if (box !== undefined) { s.box = box; drawSlot(cr.dataset.crop); } }
         const no = ev.target.closest('[data-none]');

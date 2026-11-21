@@ -258,7 +258,7 @@ async function drawDetail(body, f) {
 
   body.onclick = async (e) => {
     const g = e.target.closest('.g-item');
-    if (g) { lightbox(imgs.map((src) => ({ src })), +g.dataset.i, { name: f.name }); return; }
+    if (g) { const els = $$('.gallery img', body); lightbox(imgs.map((src, i) => ({ src, from: els[i] })), +g.dataset.i, { name: f.name }); return; }
     const st = e.target.closest('[data-status]');
     if (st) { f.status = st.dataset.status; await persist(f); drawDetail(body, f); return; }
     const star = e.target.closest('[data-star]');

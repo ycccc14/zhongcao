@@ -1,5 +1,6 @@
 /* 种草本 — warm cream & coral. Light and dark. */
 :root {
+  --ease-out: cubic-bezier(.22, .9, .24, 1); --ease-sheet: cubic-bezier(.32, .72, 0, 1); --ease-in: cubic-bezier(.4, 0, .9, .55);
   --bg: #fff7f2; --card: #ffffff; --ink: #2b2222; --ink2: #6f6262; --line: #f0e3dc; --soft: #fdeae3;
   --brand: #ee6a59; --brand-ink: #ffffff; --brand-soft: #fde1da; --on-soft: #a8392b;
   --hot: #f05d3d; --ok: #3f9b6b; --warn: #c9821c; --danger: #d64545;
@@ -95,7 +96,9 @@ html, body, main { overflow-x: clip; max-width: 100%; }
 .btn.danger { background: var(--danger); color: #fff; }
 .btn.ghost.danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
 .btn.wide { display: flex; width: 100%; margin: 10px 0; }
-.btn:active, .chip:active, .fcard:active, .nail:active { transform: scale(.98); }
+.btn, .chip, .fcard, .nail, .ecard, .item, .icon-btn, .add-btn, .tab, .g-item, .seg button, .link-btn, .banner { transition: transform .2s var(--ease-out), background-color .2s ease, color .2s ease, opacity .2s ease; }
+.btn:active, .chip:active, .item:active, .icon-btn:active, .add-btn:active, .seg button:active, .banner:active { transform: scale(.96); }
+.fcard:active, .nail:active, .ecard:active, .g-item:active { transform: scale(.98); }
 .field { display: block; margin: 0 0 12px; }
 .field > span { display: block; font-size: 12px; color: var(--ink2); margin-bottom: 4px; }
 .field input:not([type=radio]):not([type=checkbox]), .field textarea, .field select, .promo-edit input, .prompt-edit input, .prompt-edit textarea {
@@ -170,15 +173,15 @@ html, body, main { overflow-x: clip; max-width: 100%; }
 .leaflet-container { font: inherit; }
 
 /* detail pages */
-.page { position: fixed; inset: 0; z-index: 100; -webkit-transform: translateZ(0); transform: translateZ(0); background: var(--bg); display: flex; flex-direction: column; animation: pageIn .22s ease; }
-.page.leaving { animation: pageOut .2s ease forwards; }
+.page { position: fixed; inset: 0; z-index: 100; -webkit-transform: translateZ(0); transform: translateZ(0); background: var(--bg); display: flex; flex-direction: column; animation: pageIn .46s var(--ease-sheet) both; box-shadow: -12px 0 32px rgba(40, 20, 15, .12); }
+.page.leaving { animation: pageOut .34s var(--ease-in) forwards; }
 .leaving { pointer-events: none; }
 /* Leaflet's panes have z-index 200-800; keep them inside the map box so they never cover pages, sheets or headers. */
 .leaflet-container { isolation: isolate; z-index: 0; }
 .map-wrap, .mini-map, .picker-map { -webkit-transform: translateZ(0); transform: translateZ(0); }
 .covered .leaflet-container, .covered .map-tools { visibility: hidden; } /* see markCovered() in ui.js */ /* a closing page/sheet never swallows the next tap */
-@keyframes pageIn { from { transform: translateX(30%); opacity: 0; } }
-@keyframes pageOut { to { transform: translateX(30%); opacity: 0; } }
+@keyframes pageIn { from { transform: translate3d(100%, 0, 0); } }
+@keyframes pageOut { to { transform: translate3d(100%, 0, 0); } }
 .page-head { display: flex; align-items: center; gap: 6px; padding: calc(6px + var(--safe-t)) 10px 6px; border-bottom: 1px solid var(--line); background: var(--bg); }
 .page-head h2 { flex: 1; margin: 0; font-size: 17px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .page-head .back { width: 40px; height: 40px; font-size: 32px; line-height: 36px; color: var(--brand); }
@@ -266,11 +269,23 @@ ul.dishes small { width: 100%; color: var(--ink2); }
 .nail { position: relative; display: block; width: 100%; margin: 0 0 8px; break-inside: avoid; border-radius: 14px; overflow: hidden; background: var(--soft); box-shadow: var(--shadow); text-align: left; }
 /* iPhone '4:3' photos held upright: every tile is 3 wide by 4 tall, cropped to fill */
 .nail img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; object-position: center; }
+/* a design's photos, swiped sideways (native scroll-snap) with dots */
+.nail-strip, .nail-big { position: relative; }
+.pics { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.pics::-webkit-scrollbar { display: none; }
+.pics img { flex: 0 0 100%; width: 100%; scroll-snap-align: center; scroll-snap-stop: always; }
+.dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 5px; pointer-events: none; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .55); box-shadow: 0 0 3px rgba(0, 0, 0, .35); transition: transform .25s var(--ease-out), background .25s; }
+.dots i.on { background: #fff; transform: scale(1.3); }
+.nail-strip .pcount { position: absolute; right: 6px; bottom: 6px; font-style: normal; font-size: 10px; line-height: 16px; color: #fff; background: rgba(0, 0, 0, .45); border-radius: 6px; padding: 0 6px; }
+.nail-strip .pcount::before { content: '▦ '; }
+.pic-acts { display: flex; justify-content: center; gap: 18px; margin: -2px 0 6px; }
 .nail span { display: block; padding: 6px 8px; font-size: 12px; background: var(--card); }
 .nail .heart { position: absolute; right: 6px; top: 6px; color: #ff4f6d; font-style: normal; font-size: 18px; text-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
 .nail .done { position: absolute; left: 6px; top: 6px; background: var(--ok); color: #fff; font-style: normal; font-size: 10px; padding: 1px 6px; border-radius: 6px; }
 .nail-big { display: block; width: calc(100% + 32px); margin: 0 -16px 8px; background: #000; }
-.nail-big img { width: 100%; max-height: 72vh; object-fit: contain; margin: 0 auto; }
+.nail-big img { width: 100%; height: min(72vh, 133vw); max-height: none; object-fit: contain; margin: 0 auto; cursor: zoom-in; }
+.nail-big .pcount { display: none; }
 
 /* ---------- edits ---------- */
 .ecards { padding: 0 16px 16px; display: grid; gap: 12px; }
@@ -313,13 +328,19 @@ ol { padding-left: 20px; margin: 0; } ol li { margin-bottom: 4px; }
 .howto li { margin-bottom: 8px; }
 
 /* ---------- sheets, busy, toast ---------- */
-.sheet-wrap { position: fixed; inset: 0; z-index: 200; -webkit-transform: translateZ(0); transform: translateZ(0); background: rgba(20, 10, 10, .4); display: flex; align-items: flex-end; animation: fade .2s; }
-.sheet-wrap.leaving { animation: fadeOut .2s forwards; }
+.sheet-wrap { position: fixed; inset: 0; z-index: 200; -webkit-transform: translateZ(0); transform: translateZ(0); background: rgba(20, 10, 10, .4); display: flex; align-items: flex-end; animation: dimIn .32s ease both; }
+.sheet-wrap.leaving { animation: dimOut .32s ease forwards; }
+.sheet-wrap.leaving .sheet { animation: sheetDown .3s var(--ease-in) forwards; }
+@keyframes dimIn { from { background-color: rgba(20, 10, 10, 0); } }
+@keyframes dimOut { to { background-color: rgba(20, 10, 10, 0); } }
+@keyframes sheetDown { from { transform: translate3d(0, var(--from, 0px), 0); } to { transform: translate3d(0, 100%, 0); } }
 @keyframes fade { from { opacity: 0; } }
 @keyframes fadeOut { to { opacity: 0; } }
-.sheet { width: 100%; max-height: 88vh; overflow-y: auto; background: var(--bg); border-radius: 22px 22px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); animation: up .25s ease; }
+.sheet { width: 100%; max-height: 88vh; overflow-y: auto; background: var(--bg); border-radius: 22px 22px 0 0; padding: 8px 16px calc(16px + var(--safe-b)); animation: up .5s var(--ease-sheet) both; will-change: transform; }
 .sheet.tall { max-height: 94vh; }
-@keyframes up { from { transform: translateY(40%); } }
+@keyframes up { from { transform: translate3d(0, 100%, 0); } }
+.sheet.dragging { animation: none; transition: none; }
+.sheet .grip, .sheet > h3 { touch-action: none; cursor: grab; }
 .grip { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 8px; }
 .sheet h3 { margin: 4px 0 12px; text-align: center; font-size: 17px; }
 .confirm-msg { font-size: 16px; text-align: center; margin: 12px 0 18px; }
@@ -351,4 +372,22 @@ ol { padding-left: 20px; margin: 0; } ol li { margin-bottom: 4px; }
   main, .tabs { max-width: 700px; margin: 0 auto; }
   .tabs { left: 50%; transform: translateX(-50%); width: 100%; }
   .wall { columns: 3; }
+}
+
+/* ---------- motion ----------
+   Things arrive fast and land softly; only transform and opacity move. Tab switches rise in piece by piece,
+   photo tiles cascade in, the active tab icon pops. */
+@keyframes rise { from { opacity: 0; transform: translate3d(0, 14px, 0); } }
+@keyframes pop { 0% { transform: scale(.7); } 60% { transform: scale(1.18) translateY(-1px); } 100% { transform: translateY(-1px); } }
+.view.enter > * { animation: rise .5s var(--ease-out) both; }
+.view.enter > :nth-child(2) { animation-delay: .04s; }
+.view.enter > :nth-child(3) { animation-delay: .08s; }
+.view.enter > :nth-child(n+4) { animation-delay: .12s; }
+.tab.on span { animation: pop .42s var(--ease-out); }
+.wall .nail { animation: rise .5s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 28ms); }
+#toast { transition: opacity .22s ease, transform .45s cubic-bezier(.3, 1.45, .5, 1); }
+.busy { animation: dimIn .25s ease both; }
+.busy-card { animation: rise .35s var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; transition-duration: .01ms !important; }
 }

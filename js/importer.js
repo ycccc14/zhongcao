@@ -2,6 +2,7 @@
 // then gather everything into pictures the AI can look at and the app can save at full size.
 import * as net from './net.js';
 import * as img from './img.js';
+import { cropBox } from './autocrop.js';
 import { firstUrl, linkKind, SOURCE_LABEL, srtPlain } from './logic.js';
 
 // 小红书 links can't be read (rednote shows a login page to the helper), so they are only kept as the source.
@@ -67,7 +68,9 @@ export function openImport(kind, onGo, onManual, preset) {
   });
 }
 
-// Turns the inputs into {src, pics, videos}. pic = {part (for AI), note, save(box) -> image id, preview()}.
+// Turns the inputs into {src, pics, videos}. pic = {part (for AI), note, autoBox, save(box) -> image id, previewUrl}.
+// Pictures for nails / edits are auto-cropped when saved (screenshot → just its photo, no black bars): autoBox,
+// used by save() when no box is given. Food screenshots are kept whole (their text is the useful part).
 // step(text, detail) reports progress.
 export async function gather(kind, { text, files }, step) {
   let src = null;
@@ -90,7 +93,7 @@ export async function gather(kind, { text, files }, step) {
     const urls = (src.images || []).slice(0, MAX_LINK_IMAGES);
     for (let i = 0; i < urls.length; i++) {
       step('正在下载图片…', `${i + 1} / ${urls.length}`);
-      try { pics.push(await fromBlob(await net.downloadImage(urls[i]), src.video ? '封面' : '')); } catch (e) { /* skip a broken picture */ }
+      try { pics.push(await fromBlob(await net.downloadImage(urls[i]), src.video ? '封面' : '', kind)); } catch (e) { /* skip a broken picture */ }
     }
     if (src.video && src.video.url && src.video.size > MAX_VIDEO) {
       toast('视频太长，只用封面、正文和字幕识别', 3000);
@@ -107,18 +110,20 @@ export async function gather(kind, { text, files }, step) {
   }
   for (const f of files) {
     if (/^video/.test(f.type)) { step('正在读取视频…'); videoBlobs.push(f); await addVideo(f, kind, pics, videos, step); }
-    else { step('正在读取图片…'); pics.push(await fromBlob(f, '')); }
+    else { step('正在读取图片…'); pics.push(await fromBlob(f, '', kind)); }
   }
   if (!pics.length && !(src && (src.desc || src.title))) throw new Error('没有可识别的内容');
   return { src, pics, videos, videoBlobs };
 }
 
-async function fromBlob(blob, note) {
+async function fromBlob(blob, note, kind) {
   const bm = await img.bitmap(blob);
+  const autoBox = kind === 'food' ? null : cropBox(bm);
   return {
     note,
+    autoBox,
     part: await img.forAi(bm),
-    save: (box) => img.save(bm, box),
+    save: (box) => img.save(bm, box === undefined ? autoBox : box),
     previewUrl: URL.createObjectURL(blob),
   };
 }

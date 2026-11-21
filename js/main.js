@@ -9,7 +9,7 @@ import { CFG } from './config.js';
 import { fmtBytes, firstUrl, linkKind } from './logic.js';
 import { $, $$, esc, toast, busy, confirmBox, openSheet, layerCount } from './ui.js';
 
-const VERSION = 'd3ad0dfe3e';
+const VERSION = '0c39d1604e';
 const TABS = { food, nails, edits };
 const mounted = new Set();
 let current = '';
@@ -20,6 +20,11 @@ async function show(tab) {
   $$('.view').forEach((v) => { v.hidden = v.id !== `view-${tab}`; });
   db.setKv('tab', tab);
   const node = $(`#view-${tab}`);
+  node.classList.remove('enter');
+  void node.offsetWidth; // restart the rise-in animation
+  node.classList.add('enter');
+  clearTimeout(node.enterTimer);
+  node.enterTimer = setTimeout(() => node.classList.remove('enter'), 800);
   if (!mounted.has(tab)) {
     mounted.add(tab);
     if (tab === 'settings') await settings(node);

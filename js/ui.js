@@ -1,5 +1,6 @@
 // Small UI toolkit: element helper, toast, pages, sheets, confirm, copy, photo viewer.
 import { escapeHtml } from './logic.js';
+import { openViewer } from './viewer.js';
 
 export const $ = (sel, root) => (root || document).querySelector(sel);
 export const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
@@ -52,13 +53,19 @@ function markCovered() {
   layers.forEach((l, i) => l.node.classList.toggle('covered', coveredAt(i)));
 }
 
-function pushLayer(node, onClose) {
-  const layer = { node, onClose };
+const ENTER_MS = 460; // pages slide in this long (app.css pageIn)
+const LEAVE_MS = 340;
+
+// dismiss(): the layer animates itself away and removes its node (the photo viewer).
+function pushLayer(node, onClose, dismiss) {
+  const layer = { node, onClose, dismiss };
   layers.push(layer);
   // The newest layer is always on top: a page opened from a sheet (e.g. the map picker) must not hide behind it.
   node.style.zIndex = String(100 + layers.length * 10);
   history.pushState({ layer: layers.length }, '');
-  markCovered();
+  // Hide maps under a new full-screen layer only once it has slid in, so the page behind stays whole while it moves.
+  const opaque = node.classList.contains('page') || node.classList.contains('lb');
+  if (opaque) setTimeout(markCovered, ENTER_MS); else markCovered();
   return layer;
 }
 
@@ -67,8 +74,11 @@ function removeLayer(layer, fromPop) {
   if (i < 0) return;
   layers.splice(i, 1);
   markCovered();
-  layer.node.classList.add('leaving');
-  setTimeout(() => layer.node.remove(), 220);
+  if (layer.dismiss) layer.dismiss();
+  else {
+    layer.node.classList.add('leaving');
+    setTimeout(() => layer.node.remove(), LEAVE_MS);
+  }
   if (layer.onClose) layer.onClose();
   if (!fromPop) history.back();
 }
@@ -111,8 +121,49 @@ export function openSheet(title, render, opts) {
   const sheet = { node, body: $('.sheet-body', node), close: () => removeLayer(layer) };
   const layer = pushLayer(node, opts.onClose);
   node.addEventListener('click', (e) => { if (e.target === node && !opts.sticky) sheet.close(); });
+  if (!opts.sticky) dragToClose($('.sheet', node), node, sheet.close);
   render(sheet.body, sheet);
   return sheet;
+}
+
+// Pull a sheet down by its grip / title: it follows the finger, and a long or quick pull closes it.
+function dragToClose(sh, wrap, close) {
+  let d = null;
+  sh.addEventListener('pointerdown', (e) => {
+    if (!e.target.closest('.grip, .sheet > h3') || e.target.closest('button, a, input, textarea, select')) return;
+    d = { y: e.clientY, last: e.clientY, t: performance.now(), v: 0, dy: 0 };
+    try { sh.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+    sh.classList.add('dragging');
+  });
+  sh.addEventListener('pointermove', (e) => {
+    if (!d) return;
+    const now = performance.now();
+    d.v = (e.clientY - d.last) / Math.max(8, now - d.t);
+    d.last = e.clientY;
+    d.t = now;
+    const raw = e.clientY - d.y;
+    d.dy = raw > 0 ? raw : -Math.sqrt(-raw) * 2; // upwards it only stretches a little
+    sh.style.transform = `translateY(${d.dy}px)`;
+    wrap.style.backgroundColor = `rgba(20, 10, 10, ${(0.4 * Math.max(0.15, 1 - Math.max(0, d.dy) / (sh.offsetHeight || 600))).toFixed(3)})`;
+  });
+  const end = () => {
+    if (!d) return;
+    const { dy, v } = d;
+    d = null;
+    sh.classList.remove('dragging');
+    if (dy > Math.min(140, sh.offsetHeight * 0.3) || (v > 0.55 && dy > 10)) {
+      sh.style.setProperty('--from', `${Math.max(0, dy)}px`); // the closing slide starts where the finger let go
+      sh.style.transform = '';
+      close();
+    } else {
+      sh.style.transition = 'transform .4s cubic-bezier(.32, .72, 0, 1)';
+      sh.style.transform = '';
+      wrap.style.backgroundColor = '';
+      setTimeout(() => { sh.style.transition = ''; }, 420);
+    }
+  };
+  sh.addEventListener('pointerup', end);
+  sh.addEventListener('pointercancel', end);
 }
 
 export function confirmBox(msg, okText, danger) {
@@ -143,130 +194,27 @@ export function busy(text) {
 }
 
 // ---------- photo viewer ----------
-// items: [{src, caption}] ; pinch / double-tap to zoom, swipe to change, pull down to close.
+// items: [{src, caption, from?: the <img> on the page it opens out of}]. The viewer itself is js/viewer.js
+// (zoom, swipe, pull down to close); here it gets the back button and the save / share button.
 export function lightbox(items, start, opts) {
   opts = opts || {};
-  let idx = Math.max(0, Math.min(start || 0, items.length - 1));
-  const node = el(`<div class="lb" role="dialog" aria-label="查看图片">
-    <div class="lb-track"></div>
-    <div class="lb-top"><span class="lb-count"></span><span class="grow"></span>
-      <button class="lb-btn lb-save" aria-label="保存/分享">⇩</button><button class="lb-btn lb-x" aria-label="关闭">✕</button></div>
-    <div class="lb-cap"></div></div>`);
-  const track = $('.lb-track', node);
-  items.forEach((it) => track.appendChild(el(`<div class="lb-slide"><div class="lb-zoom"><img alt="" draggable="false" src="${esc(it.src)}"></div></div>`)));
-  document.body.appendChild(node);
-  const slides = $$('.lb-slide', node);
-  const W = () => node.clientWidth;
-  const H = () => node.clientHeight;
-  let z = { s: 1, x: 0, y: 0 };
-
-  const applyZoom = (anim) => {
-    const zoom = $('.lb-zoom', slides[idx]);
-    zoom.style.transition = anim ? 'transform .2s' : 'none';
-    zoom.style.transform = `translate(${z.x}px,${z.y}px) scale(${z.s})`;
-  };
-  const clampZoom = () => {
-    z.s = Math.max(1, Math.min(z.s, 6));
-    if (z.s === 1) { z.x = 0; z.y = 0; return; }
-    z.x = Math.min(0, Math.max(W() - W() * z.s, z.x));
-    z.y = Math.min(0, Math.max(H() - H() * z.s, z.y));
-  };
-  const show = (anim) => {
-    track.style.transition = anim ? 'transform .25s ease' : 'none';
-    track.style.transform = `translateX(${-idx * 100}%)`;
-    $('.lb-count', node).textContent = items.length > 1 ? `${idx + 1} / ${items.length}` : '';
-    $('.lb-cap', node).textContent = items[idx].caption || '';
-    $('.lb-cap', node).hidden = !items[idx].caption;
-  };
-  const resetZoom = () => { z = { s: 1, x: 0, y: 0 }; slides.forEach((s) => { $('.lb-zoom', s).style.transform = ''; }); };
-  show(false);
-
-  const pts = new Map();
-  let gesture = null;
-  let lastTap = 0;
-  node.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.lb-btn')) return;
-    try { node.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
-    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pts.size === 1) {
-      gesture = { kind: 'pending', sx: e.clientX, sy: e.clientY, z0: { ...z }, t: Date.now() };
-    } else if (pts.size === 2) {
-      const [a, b] = [...pts.values()];
-      gesture = { kind: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y), m0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, z0: { ...z } };
-    }
+  let layer = null;
+  const v = openViewer(items, start, {
+    cls: 'lb',
+    buttons: '<button class="vw-btn lb-save" aria-label="保存/分享">⇩</button>',
+    onClose: () => { if (layer) removeLayer(layer); },
   });
-  node.addEventListener('pointermove', (e) => {
-    if (!pts.has(e.pointerId) || !gesture) return;
-    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (gesture.kind === 'pinch' && pts.size >= 2) {
-      const [a, b] = [...pts.values()];
-      const d = Math.hypot(a.x - b.x, a.y - b.y);
-      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      const s = Math.max(0.8, Math.min(gesture.z0.s * (d / gesture.d0), 6));
-      const k = s / gesture.z0.s;
-      z = { s, x: m.x - (gesture.m0.x - gesture.z0.x) * k, y: m.y - (gesture.m0.y - gesture.z0.y) * k };
-      applyZoom(false);
-      return;
-    }
-    const dx = e.clientX - gesture.sx;
-    const dy = e.clientY - gesture.sy;
-    if (gesture.kind === 'pending' && Math.hypot(dx, dy) > 8) {
-      gesture.kind = z.s > 1 ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'swipe' : dy > 0 ? 'pull' : 'none';
-    }
-    if (gesture.kind === 'pan') { z = { s: z.s, x: gesture.z0.x + dx, y: gesture.z0.y + dy }; applyZoom(false); }
-    if (gesture.kind === 'swipe') { track.style.transition = 'none'; track.style.transform = `translateX(calc(${-idx * 100}% + ${dx}px))`; }
-    if (gesture.kind === 'pull') { track.style.transition = 'none'; track.style.transform = `translate(${-idx * 100}%, ${dy}px)`; node.style.background = `rgba(0,0,0,${Math.max(0.3, 1 - dy / 400)})`; }
-  });
-  const up = (e) => {
-    if (!pts.has(e.pointerId)) return;
-    pts.delete(e.pointerId);
-    if (!gesture) return;
-    const g = gesture;
-    if (g.kind === 'pinch') {
-      if (pts.size === 0) { clampZoom(); applyZoom(true); gesture = null; }
-      else { const [p] = [...pts.values()]; gesture = { kind: 'pan', sx: p.x, sy: p.y, z0: { ...z } }; }
-      return;
-    }
-    gesture = null;
-    const dx = e.clientX - g.sx;
-    const dy = e.clientY - g.sy;
-    if (g.kind === 'pending' && Date.now() - g.t < 300) {
-      const now = Date.now();
-      if (now - lastTap < 300) { // double tap
-        lastTap = 0;
-        if (z.s > 1) z = { s: 1, x: 0, y: 0 };
-        else { const s = 2.6; z = { s, x: e.clientX - e.clientX * s, y: e.clientY - e.clientY * s }; clampZoom(); }
-        applyZoom(true);
-      } else lastTap = now;
-      return;
-    }
-    if (g.kind === 'pan') { clampZoom(); applyZoom(true); }
-    if (g.kind === 'swipe') {
-      if (dx < -60 && idx < items.length - 1) { idx++; resetZoom(); } else if (dx > 60 && idx > 0) { idx--; resetZoom(); }
-      show(true);
-    }
-    if (g.kind === 'pull') {
-      if (dy > 120) { close(); return; }
-      node.style.background = '';
-      show(true);
-    }
-  };
-  node.addEventListener('pointerup', up);
-  node.addEventListener('pointercancel', up);
-
-  const layer = pushLayer(node);
-  const close = () => removeLayer(layer);
-  $('.lb-x', node).onclick = close;
+  layer = pushLayer(v.el, null, v.close);
   // Load the file before the tap: sharing must start right away after a tap (iPhone forgets it otherwise).
   const files = new Map();
   const prepare = (i) => {
     if (!files.has(i)) files.set(i, fetch(items[i].src).then((r) => r.blob()).then((b) => new File([b], `${opts.name || 'zhongcao'}-${i + 1}.jpg`, { type: b.type || 'image/jpeg' })).catch(() => null));
     return files.get(i);
   };
-  prepare(idx);
-  track.addEventListener('transitionend', () => prepare(idx));
-  $('.lb-save', node).onclick = () => {
-    const i = idx;
+  prepare(v.index());
+  v.el.addEventListener('transitionend', () => prepare(v.index()));
+  $('.lb-save', v.el).onclick = () => {
+    const i = v.index();
     let ready = null;
     prepare(i).then((f) => { ready = f; });
     const go = (file) => {
@@ -280,8 +228,7 @@ export function lightbox(items, start, opts) {
     // A resolved promise still runs its callback in a microtask, which keeps the tap; check right after.
     Promise.resolve().then(() => Promise.resolve()).then(() => (ready ? go(ready) : prepare(i).then(go)));
   };
-  window.addEventListener('resize', () => { resetZoom(); show(false); });
-  return { close };
+  return { close: v.close };
 }
 
 // Chip group for multi/single select. values: [value] or [{value,label}]. Returns element with .value getter.

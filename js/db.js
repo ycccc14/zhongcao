@@ -69,7 +69,7 @@ export const setKv = (id, value) => put('kv', { id, value });
 export async function sweepImages() {
   const used = new Set();
   for (const f of await all('food')) for (const i of f.images || []) used.add(i);
-  for (const n of await all('nails')) used.add(n.image);
+  for (const n of await all('nails')) { if (n.image) used.add(n.image); for (const i of n.images || []) used.add(i); }
   for (const e of await all('edits')) { if (e.before) used.add(e.before); if (e.after) used.add(e.after); for (const i of e.images || []) used.add(i); }
   const ids = await keys('images');
   let removed = 0;

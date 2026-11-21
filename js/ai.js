@@ -292,7 +292,7 @@ const FOOD_SCHEMA = obj({
 const NAIL_SCHEMA = obj({
   items: S('array', {
     items: obj({
-      index: S('integer'), is_nail: S('boolean'), title: str,
+      index: S('integer'), is_nail: S('boolean'), design: S('integer'), title: str,
       color_family: S('string', { enum: [...Object.keys(NAIL_COLORS), ''] }),
       colors: S('array', { items: obj({ name: str, hex: str }) }),
       styles: S('array', { items: S('string', { enum: NAIL_STYLES }) }),
@@ -359,9 +359,10 @@ export async function readFood(images, src, videos) {
 export async function readNails(images, src) {
   const content = [];
   images.forEach((im, i) => { content.push(label(i)); content.push(im); });
-  content.push({ type: 'text', text: `${sourceText(src)}\n请给每张图片分类（每张图一条，index 对应图片编号）。` });
+  content.push({ type: 'text', text: `${sourceText(src)}\n请给每张图片分类（每张图一条，index 对应图片编号），并标出哪些图是同一款。` });
   const system = `你是美甲款式整理助手。对每张图片：
 - is_nail：图里是否主要是美甲款式（手/指甲）。不是美甲（比如价目表、店面）就 false，其余字段可以留空。
+- design：款式编号，从 0 开始。同一款美甲的几张图（同一套指甲的不同角度、近景、另一只手、换个光线）用同一个编号，title 和分类也写成一样；明显不同的款式用不同编号。
 - title：6-12 个字的中文款式名，像小红书标题，如“奶油白猫眼法式”“冰透粉晕染短甲”。
 - color_family：整体主色归类，只能选给定的英文代码之一；colors：1-4 个主要颜色，name 中文，hex 是 #RRGGBB。
 - styles：所有符合的款式类型；shape：甲型；length：长度；vibes：风格感觉（1-3 个）；seasons：适合的季节（可多选）。
