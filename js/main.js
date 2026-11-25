@@ -6,10 +6,10 @@ import * as food from './food.js';
 import * as nails from './nails.js';
 import * as edits from './edits.js';
 import { CFG } from './config.js';
-import { fmtBytes, firstUrl, linkKind } from './logic.js';
+import { fmtBytes, firstUrl, linkKind, cleanBackup, BACKUP_STORES, BACKUP_MAX_BYTES } from './logic.js';
 import { $, $$, esc, toast, busy, confirmBox, openSheet, layerCount } from './ui.js';
 
-const VERSION = '95852cbfd3';
+const VERSION = '6da3b7d2bd';
 const TABS = { food, nails, edits };
 const mounted = new Set();
 let current = '';
@@ -73,7 +73,7 @@ async function settings(node) {
       <p class="hint">所有记录和图片都只存在这台手机的这个 App 里。换手机或删掉 App 前，记得导出备份。</p>
       <p>已用空间：${est ? fmtBytes(est.usage) : '—'}${persisted ? ' · 已锁定不被清理' : ''}　上次备份：${last ? new Date(last).toLocaleDateString() : '从未'}</p>
       <div class="row gap"><button class="btn ghost grow" data-a="export">导出备份</button><button class="btn ghost grow" data-a="import">导入备份</button></div></section>
-    <section class="box"><h3>ℹ️ 关于</h3><p class="hint">种草本 v${esc(VERSION)} · 地图 © OpenStreetMap · 路线 OSRM${CFG.helper ? '' : ' · ⚠️ 链接读取服务未设置'}</p>
+    <section class="box"><h3>ℹ️ 关于</h3><p class="hint">种草本 v${esc(VERSION)} · 地图数据 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> · 路线 OSRM${CFG.helper ? '' : ' · ⚠️ 链接读取服务未设置'}</p>
       <button class="link-btn" data-a="howto">怎么从小红书 / IG 加进来？</button></section>`;
   let shown = pick;
   node.onclick = async (e) => {
@@ -122,7 +122,7 @@ function howto() {
 
 // ---------- backup ----------
 
-const STORES = ['food', 'nails', 'edits', 'places'];
+const STORES = BACKUP_STORES;
 
 async function exportBackup(done) {
   const w = busy('正在打包…');
@@ -145,7 +145,7 @@ async function exportBackup(done) {
     // Sharing needs a fresh tap (packaging takes too long for the first one), so ask for it.
     openSheet('备份准备好了', (box, sheet) => {
       box.innerHTML = `<p class="confirm-msg">${esc(name)}<br><small class="muted">${fmtBytes(blob.size)}</small></p>
-        <p class="hint">iPhone：点下面按钮后选「存储到文件」，放到 iCloud 云盘最安全。</p><button class="btn wide" data-a="save">保存备份文件</button>`;
+        <p class="hint">iPhone：点下面按钮后选「存储到文件」，放到 iCloud 云盘最安全。<br>备份里有你所有的地点和照片，别发到群里。</p><button class="btn wide" data-a="save">保存备份文件</button>`;
       $('[data-a=save]', box).onclick = async () => {
         try {
           if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: name });
@@ -176,20 +176,24 @@ function importBackup() {
     const f = input.files[0];
     if (!f) return;
     if (!await confirmBox('导入会把备份里的记录加进来（同一条会被备份覆盖），继续？', '导入')) return;
+    if (f.size > BACKUP_MAX_BYTES) { toast(`这个文件有 ${fmtBytes(f.size)}，太大了，手机读不动。种草本的备份一般不会超过 ${fmtBytes(BACKUP_MAX_BYTES)}。`, 6000); return; }
     const w = busy('正在读取备份…');
     try {
-      const data = JSON.parse(await f.text());
-      if (data.app !== 'zhongcao') throw new Error('这不是种草本的备份文件');
+      let raw;
+      try { raw = JSON.parse(await f.text()); } catch (e) { throw new Error('文件读不出来，可能不是种草本的备份，或者文件不完整'); }
+      const data = cleanBackup(raw); // only what the app itself writes; pictures must be inside the file
+      raw = null;
+      // data: URLs only (checked above), so this never goes out to the internet.
       const toBlob = async (u) => (u ? (await fetch(u)).blob() : null);
-      for (let i = 0; i < (data.images || []).length; i++) {
+      for (let i = 0; i < data.images.length; i++) {
         w.set('正在导入图片…', `${i + 1} / ${data.images.length}`);
         const im = data.images[i];
         await db.put('images', { id: im.id, w: im.w, h: im.h, at: im.at, blob: await toBlob(im.full), thumb: await toBlob(im.thumb) });
       }
-      for (const s of STORES) if (Array.isArray(data[s])) await db.putMany(s, data[s]);
+      for (const s of STORES) if (data[s].length) await db.putMany(s, data[s]);
       w.done();
-      toast('导入完成 ✓');
-      setTimeout(() => location.reload(), 800);
+      toast(data.skipped ? `导入完成 ✓（有 ${data.skipped} 条内容格式不对，已跳过）` : '导入完成 ✓', data.skipped ? 3500 : 2000);
+      setTimeout(() => location.reload(), data.skipped ? 2500 : 800);
     } catch (e) {
       w.done();
       toast(`导入失败：${e.message}`, 4000);

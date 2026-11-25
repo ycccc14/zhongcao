@@ -16,6 +16,7 @@ export const CFG = {
   osrmFoot: dev.osrmFoot || 'https://routing.openstreetmap.de/routed-foot/route/v1/driving/',
   // CARTO tiles started needing an API key (2026-11); OpenStreetMap's own tiles are free with attribution.
   tiles: dev.tiles || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  tilesAttr: '© OpenStreetMap',
+  // ODbL: credit "OpenStreetMap contributors" with a link to the copyright page.
+  tilesAttr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
   isDev: !!dev.helper,
 };

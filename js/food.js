@@ -231,7 +231,7 @@ async function drawDetail(body, f) {
   const promos = (f.promos || []).map((p) => ({ p, s: promoStatus(p, on) })).sort((a, b) => ['active', 'ending', 'soon', 'unknown', 'expired'].indexOf(a.s.key) - ['active', 'ending', 'soon', 'unknown', 'expired'].indexOf(b.s.key));
   const nav = navLinks(f);
   body.innerHTML = `
-    ${imgs.length ? `<div class="gallery">${imgs.map((u, i) => `<button class="g-item" data-i="${i}"><img src="${u}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
+    ${imgs.length ? `<div class="gallery">${imgs.map((u, i) => `<button class="g-item" data-i="${i}"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
     <div class="detail-head">
       <h1>${esc(f.name)}${f.branch ? ` <small>${esc(f.branch)}</small>` : ''}</h1>
       <p class="meta"><i class="ctag">${cuisineInfo(cuisineOf(f)).icon} ${esc(cuisineInfo(cuisineOf(f)).label)}</i> ${[f.cuisine, priceText(f.price)].filter(Boolean).map(esc).join(' · ')}</p>
@@ -246,9 +246,9 @@ async function drawDetail(body, f) {
       ${f.address ? `<p class="addr">${esc(f.address)} <button class="link-btn" data-a="copy-addr">复制</button></p>` : ''}
       ${f.lat == null ? `<p class="warn">还没定位。<button class="link-btn" data-a="locate">设置位置</button></p>` : `${f.geo === 'auto' ? '<p class="hint">按地址自动定位的，不准的话 <button class="link-btn" data-a="locate">改位置</button></p>' : ''}<div class="mini-map"></div>`}
       <div class="travel">${f.lat != null && ps.length ? ps.map((p) => `<div class="tr" data-place="${p.id}"><span class="emoji">${places.icon(p)}</span><div class="grow"><b>从${esc(p.name)} · ${fmtKm(km(p, f))}</b><small class="adv">计算中…</small></div>
-        <a class="mini-btn" href="${navLinks(f, p).transit}" target="_blank" rel="noopener">公交</a></div>`).join('') : f.lat != null ? '<p class="hint"><button class="link-btn" data-a="places">设置家/学校/公司</button>，就能看到距离和交通建议</p>' : ''}</div>
-      <div class="nav-row"><a class="btn small" href="${nav.google}" target="_blank" rel="noopener">Google 导航</a><a class="btn small ghost" href="${nav.waze}" target="_blank" rel="noopener">Waze</a>
-        ${nav.grab ? `<a class="btn small ghost" href="${nav.grab}">Grab</a>` : ''}<a class="btn small ghost" href="${nav.apple}" target="_blank" rel="noopener">Apple 地图</a></div>
+        <a class="mini-btn" href="${esc(navLinks(f, p).transit)}" target="_blank" rel="noopener">公交</a></div>`).join('') : f.lat != null ? '<p class="hint"><button class="link-btn" data-a="places">设置家/学校/公司</button>，就能看到距离和交通建议</p>' : ''}</div>
+      <div class="nav-row"><a class="btn small" href="${esc(nav.google)}" target="_blank" rel="noopener">Google 导航</a><a class="btn small ghost" href="${esc(nav.waze)}" target="_blank" rel="noopener">Waze</a>
+        ${nav.grab ? `<a class="btn small ghost" href="${esc(nav.grab)}">Grab</a>` : ''}<a class="btn small ghost" href="${esc(nav.apple)}" target="_blank" rel="noopener">Apple 地图</a></div>
     </section>
     ${f.hours || f.phone ? `<section class="box"><h3>🕒 营业</h3>${f.hours ? `<p>${esc(f.hours)}</p>` : ''}${f.phone ? `<p><a href="tel:${esc(f.phone)}">${esc(f.phone)}</a></p>` : ''}</section>` : ''}
     ${(f.tags || []).length ? `<div class="tags">${f.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join('')}</div>` : ''}
@@ -284,7 +284,7 @@ async function drawDetail(body, f) {
     if (mm) {
       const m = places.makeMap(mm, { dragging: false, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
       m.setView([f.lat, f.lng], 15);
-      window.L.marker([f.lat, f.lng], { icon: window.L.divIcon({ className: 'pin-food want', html: `<div class="pf">${imgs[0] ? `<img src="${imgs[0]}" alt="">` : cuisineInfo(cuisineOf(f)).icon}</div>`, iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(m);
+      window.L.marker([f.lat, f.lng], { icon: window.L.divIcon({ className: 'pin-food want', html: `<div class="pf">${imgs[0] ? `<img src="${esc(imgs[0])}" alt="">` : cuisineInfo(cuisineOf(f)).icon}</div>`, iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(m);
       setTimeout(() => m.invalidateSize(), 300);
       mm.onclick = () => window.open(nav.google, '_blank');
     }
@@ -307,7 +307,7 @@ async function fillTravel(body, f, ps) {
       if (r) { f.routes[p.id] = { key, r }; changed = true; }
     }
     const adv = travelAdvice(d, r);
-    row.innerHTML = `${esc(adv.say)}${adv.estimated ? '（估算）' : ''}${adv.transitHint ? ` · <a href="${navLinks(f, p).transit}" target="_blank" rel="noopener">${adv.transitHint}</a>` : ''}`;
+    row.innerHTML = `${esc(adv.say)}${adv.estimated ? '（估算）' : ''}${adv.transitHint ? ` · <a href="${esc(navLinks(f, p).transit)}" target="_blank" rel="noopener">${esc(adv.transitHint)}</a>` : ''}`;
   }
   if (changed) await db.put('food', f);
 }

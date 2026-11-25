@@ -68,20 +68,31 @@ export function travelAdvice(d, route) {
   return { mode, say, walk, drive, roadKm, transitHint, estimated: !route };
 }
 
+// A real coordinate pair or null. Only numbers (or number strings) in range count, so links never carry anything else.
+export function coords(p) {
+  if (!p) return null;
+  const num = (x) => (typeof x === 'number' ? x : typeof x === 'string' && x.trim() !== '' ? Number(x) : NaN);
+  const lat = num(p.lat);
+  const lng = num(p.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+}
+
 export function navLinks(dest, origin) {
-  if (!dest || dest.lat == null) {
+  const c = coords(dest);
+  if (!c) {
     const q = encodeURIComponent([dest && dest.name, dest && dest.address].filter(Boolean).join(' '));
     return { google: `https://www.google.com/maps/search/?api=1&query=${q}`, waze: `https://waze.com/ul?q=${q}`, apple: `https://maps.apple.com/?q=${q}` };
   }
-  const d = `${dest.lat},${dest.lng}`;
-  const o = origin && origin.lat != null ? `&origin=${origin.lat},${origin.lng}` : '';
+  const oc = coords(origin);
+  const d = `${c.lat},${c.lng}`;
+  const o = oc ? `&origin=${oc.lat},${oc.lng}` : '';
   const name = encodeURIComponent(dest.name || '');
   return {
     google: `https://www.google.com/maps/dir/?api=1${o}&destination=${d}`,
     transit: `https://www.google.com/maps/dir/?api=1${o}&destination=${d}&travelmode=transit`,
     waze: `https://waze.com/ul?ll=${d}&navigate=yes`,
-    apple: `https://maps.apple.com/?daddr=${d}${origin && origin.lat != null ? `&saddr=${origin.lat},${origin.lng}` : ''}&q=${name}`,
-    grab: `grab://open?screenType=BOOKING&dropOffLatitude=${dest.lat}&dropOffLongitude=${dest.lng}&dropOffName=${name}`,
+    apple: `https://maps.apple.com/?daddr=${d}${oc ? `&saddr=${oc.lat},${oc.lng}` : ''}&q=${name}`,
+    grab: `grab://open?screenType=BOOKING&dropOffLatitude=${c.lat}&dropOffLongitude=${c.lng}&dropOffName=${name}`,
   };
 }
 
@@ -165,14 +176,20 @@ export function normName(name) {
     .replace(/[\s·・.,，。'’"“”!！?？&@#\-_/|:：]/g, '');
 }
 
+// The name a record gets when the AI couldn't read one. Two of these are not the same place.
+export const UNNAMED_FOOD = '未命名餐厅';
+
 export function sameRestaurant(a, b) {
+  if (String(a.name || '').trim() === UNNAMED_FOOD || String(b.name || '').trim() === UNNAMED_FOOD) return false;
   const x = normName(a.name);
   const y = normName(b.name);
   if (!x || !y) return false;
   const nameHit = x === y || (Math.min(x.length, y.length) >= 3 && (x.includes(y) || y.includes(x)));
   if (!nameHit) return false;
   const d = km(a, b);
-  return d == null || d < 2;
+  // A one-letter name says too little on its own: only the map can tell it's the same place.
+  if (d == null) return Math.min(x.length, y.length) >= 2;
+  return d < 2;
 }
 
 export const findDuplicate = (list, cand) => list.find((f) => f.id !== cand.id && sameRestaurant(f, cand)) || null;
@@ -182,6 +199,15 @@ const uniqBy = (arr, key) => {
   return arr.filter((x) => { const k = key(x); if (!k || seen.has(k)) return false; seen.add(k); return true; });
 };
 
+// Like uniqBy, but an item with no key is kept (it can't be a repeat of anything): merging must never drop data.
+const uniqKeep = (arr, key) => {
+  const seen = new Set();
+  return arr.filter((x) => { const k = key(x); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; });
+};
+
+// Light key for dishes and promo titles: case and spaces only. Brackets stay, so 炸鸡(大) and 炸鸡(小) are two dishes.
+const itemKey = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
+
 // Merge `b` into `a` (a wins on conflicts, b fills the gaps; lists are joined).
 export function mergeFood(a, b) {
   const out = { ...a };
@@ -190,11 +216,12 @@ export function mergeFood(a, b) {
   if (out.lat == null && b.lat != null) { out.lat = b.lat; out.lng = b.lng; out.geo = b.geo; }
   const p = a.price || {};
   if (p.min == null && p.max == null && !p.text && b.price) out.price = b.price;
-  out.dishes = uniqBy([...(a.dishes || []), ...(b.dishes || [])], (d) => normName(d.name));
-  out.promos = uniqBy([...(a.promos || []), ...(b.promos || [])], (x) => normName(x.title) + (x.end || ''));
+  out.dishes = uniqKeep([...(a.dishes || []), ...(b.dishes || [])], (d) => itemKey(d && d.name));
+  // Same title + same end date = same promo; an untitled promo is matched on its wording.
+  out.promos = uniqKeep([...(a.promos || []), ...(b.promos || [])], (x) => (x && (x.title || x.detail) ? `${itemKey(x.title)}|${x.end || ''}|${x.title ? '' : itemKey(x.detail)}` : ''));
   out.tags = uniqBy([...(a.tags || []), ...(b.tags || [])], (t) => t);
   out.images = uniqBy([...(a.images || []), ...(b.images || [])], (i) => i);
-  out.sources = uniqBy([...(a.sources || []), ...(b.sources || [])], (s) => s.url || s.at);
+  out.sources = uniqKeep([...(a.sources || []), ...(b.sources || [])], (s) => s && (s.url || s.at));
   out.notes = [a.notes, b.notes].filter(Boolean).join('\n');
   out.updated = Date.now();
   return out;
@@ -206,7 +233,7 @@ export function foodFromAi(r, extra) {
   return {
     id: uid(),
     status: 'want',
-    name: (r.name || '').trim() || '未命名餐厅',
+    name: (r.name || '').trim() || UNNAMED_FOOD,
     branch: r.branch || '',
     cuisine: r.cuisine || '',
     category: CUISINE_KEYS.includes(r.category) && r.category !== 'other' ? r.category : guessCuisine(r.cuisine, r.tags, r.name, (r.dishes || []).map((d) => d && d.name)),
@@ -327,6 +354,7 @@ export function mergeNails(keep, others) {
     styles: keep.styles && keep.styles.length ? keep.styles : list('styles'), vibes: keep.vibes && keep.vibes.length ? keep.vibes : list('vibes'),
     seasons: keep.seasons && keep.seasons.length ? keep.seasons : list('seasons'),
     sources: [...new Map([keep, ...others].flatMap((n) => n.sources || []).map((s) => [s.url || JSON.stringify(s), s])).values()],
+    note: [...new Set([keep, ...others].map((n) => String(n.note || '').trim()).filter(Boolean))].join('\n'),
     updated: Date.now(),
   };
 }
@@ -381,6 +409,63 @@ export function normalizeTool(t) {
   if (/doubao/i.test(s)) return '豆包';
   if (/xingtu|hypic/i.test(s)) return '醒图';
   return s.slice(0, 16);
+}
+
+// ---------- backup files ----------
+// A backup is a file, and a file can come from someone else. Before anything is stored, keep only what this app
+// itself writes: ids are short strings, coordinates are numbers, pictures are data: URLs (never web addresses,
+// which the phone would go and fetch), source links are http(s). Anything else is skipped and counted.
+
+export const BACKUP_STORES = ['food', 'nails', 'edits', 'places'];
+export const BACKUP_MAX_BYTES = 500 * 1024 * 1024;
+const isId = (x) => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x); // what uid() makes; ids go into the page as-is
+const isObj = (x) => x != null && typeof x === 'object' && !Array.isArray(x);
+const numOrNull = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+const IMAGE_DATA = /^data:(image\/[\w.+-]+|application\/octet-stream)?;base64,/i;
+
+// The link itself if it is an http(s) web address, otherwise ''.
+export function webUrl(u) {
+  const s = String(u || '').trim();
+  try { return /^https?:$/.test(new URL(s).protocol) ? s : ''; } catch (e) { return ''; }
+}
+
+function cleanRecord(store, r) {
+  const x = { ...r };
+  if (store === 'places' || 'lat' in x || 'lng' in x) {
+    const c = coords(x);
+    if (store === 'places' && !c) return null; // a place is nothing but its spot on the map
+    x.lat = c ? c.lat : null;
+    x.lng = c ? c.lng : null;
+  }
+  if ('images' in x) x.images = Array.isArray(x.images) ? x.images.filter(isId) : [];
+  for (const k of ['image', 'before', 'after']) if (k in x && x[k] && !isId(x[k])) x[k] = '';
+  if ('sources' in x) x.sources = Array.isArray(x.sources) ? x.sources.filter(isObj).map((s) => ({ ...s, url: s.url ? webUrl(s.url) : '' })) : [];
+  if (store === 'food') delete x.routes; // saved road times: worked out again when the place is opened
+  if (store === 'nails') {
+    if (x.color && !Object.prototype.hasOwnProperty.call(NAIL_COLORS, x.color)) x.color = '';
+    if ('colors' in x) x.colors = Array.isArray(x.colors) ? x.colors.filter((c) => isObj(c) && /^#[0-9a-f]{6}$/i.test(c.hex)) : [];
+  }
+  return x;
+}
+
+// Returns { food, nails, edits, places, images, skipped }; throws if it isn't a 种草本 backup at all.
+export function cleanBackup(data) {
+  if (!isObj(data) || data.app !== 'zhongcao') throw new Error('这不是种草本的备份文件');
+  let skipped = 0;
+  const out = { images: [] };
+  for (const im of Array.isArray(data.images) ? data.images : []) {
+    if (!isObj(im) || !isId(im.id) || typeof im.full !== 'string' || !IMAGE_DATA.test(im.full)) { skipped++; continue; }
+    out.images.push({ id: im.id, w: numOrNull(im.w), h: numOrNull(im.h), at: numOrNull(im.at), full: im.full, thumb: typeof im.thumb === 'string' && IMAGE_DATA.test(im.thumb) ? im.thumb : '' });
+  }
+  for (const s of BACKUP_STORES) {
+    out[s] = [];
+    for (const r of Array.isArray(data[s]) ? data[s] : []) {
+      const c = isObj(r) && isId(r.id) ? cleanRecord(s, r) : null;
+      if (c) out[s].push(c); else skipped++;
+    }
+  }
+  out.skipped = skipped;
+  return out;
 }
 
 // ---------- misc ----------
