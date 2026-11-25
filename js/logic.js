@@ -17,9 +17,10 @@ export function firstUrl(text) {
 
 export function linkKind(url) {
   const h = (String(url).match(/^https?:\/\/([^/?#:]+)/i) || [])[1] || '';
-  if (/xhslink\.com$|xiaohongshu\.com$|rednote\.com$/i.test(h)) return 'xhs';
-  if (/instagram\.com$/i.test(h)) return 'ins';
-  if (/(^|\.)goo\.gl$|google\.[a-z.]+$|g\.co$/i.test(h)) return 'maps';
+  // Whole domain names only (the name itself or a sub-domain of it): notxiaohongshu.com is just a web page.
+  if (/(^|\.)(xhslink\.com|xiaohongshu\.com|rednote\.com)$/i.test(h)) return 'xhs';
+  if (/(^|\.)instagram\.com$/i.test(h)) return 'ins';
+  if (/(^|\.)(goo\.gl|g\.co|google\.(com|[a-z]{2})(\.[a-z]{2})?)$/i.test(h)) return 'maps';
   return h ? 'web' : '';
 }
 
@@ -377,7 +378,8 @@ export const srtPlain = (text) => parseSrt(text).map((x) => `[${Math.floor(x.t /
 
 // Times to sample from a video: n frames spread over the clip, skipping the very first/last fraction of a second.
 export function frameTimes(duration, n) {
-  if (!(duration > 0)) return [0];
+  // Some Android screen recordings (webm) report an endless length until played through: treat it as unknown.
+  if (!(duration > 0) || !Number.isFinite(duration)) return [0];
   const count = Math.max(1, Math.min(n, Math.ceil(duration / 0.6)));
   const start = Math.min(0.15, duration / 10);
   const end = Math.max(start, duration - Math.min(0.25, duration / 10));

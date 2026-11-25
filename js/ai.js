@@ -2,6 +2,7 @@
 //   gemini (default): Google Gemini API free tier, plain REST generateContent (no SDK: less to go wrong on the phone)
 //   claude (optional, paid): Anthropic API, through the official Anthropic SDK (web/vendor/anthropic.mjs, loaded when first used)
 import { CFG } from './config.js';
+import { fetchWithin, LIMITS } from './net.js';
 import { today, CUISINES, NAIL_COLORS, NAIL_STYLES, NAIL_SHAPES, NAIL_LENGTHS, NAIL_VIBES, SEASONS } from './logic.js';
 
 export const PROVIDERS = {
@@ -52,18 +53,21 @@ class GeminiError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
 }
 
+// Reading a long video can take a minute or two; past this the network is the problem, not the AI.
+const GEMINI_WAIT = 180000;
+
 async function geminiFetch(key, path, body) {
   let res;
+  let text;
   try {
-    res = await fetch(`${geminiBase()}/${path}`, {
+    [res, text] = await fetchWithin(`${geminiBase()}/${path}`, {
       method: body ? 'POST' : 'GET',
       headers: { 'x-goog-api-key': key, ...(body ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }, body ? GEMINI_WAIT : LIMITS.json, async (r) => [r, await r.text()]);
   } catch (e) {
-    throw new GeminiError(0, 'NETWORK', String((e && e.message) || e));
+    throw new GeminiError(0, e && e.timeout ? 'TIMEOUT' : 'NETWORK', String((e && e.message) || e));
   }
-  const text = await res.text();
   let data = null;
   try { data = JSON.parse(text); } catch (e) { data = null; }
   if (!res.ok) {
@@ -84,6 +88,7 @@ function geminiError(err) {
   if (status === 404 || code === 'NOT_FOUND') return { text: `找不到这个模型：${msg.slice(0, 120)}`, missing: true };
   if (status === 400 && /schema|response_?json|enum|anyOf/i.test(msg)) return { text: msg.slice(0, 160), schema: true };
   if (status >= 500) return { text: `Gemini 暂时出错了（${status}），稍后再试`, retry: true };
+  if (code === 'TIMEOUT') return { text: 'Gemini 等了很久没有回应（网络太慢），请换个网络再试' };
   if (code === 'NETWORK') return { text: `连不上 Gemini，请检查网络（${msg.slice(0, 60)}）` };
   return { text: `Gemini 出错了（${status || '?'}）：${msg.slice(0, 160)}` };
 }

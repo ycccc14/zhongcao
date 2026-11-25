@@ -9,7 +9,7 @@ import { CFG } from './config.js';
 import { fmtBytes, firstUrl, linkKind, cleanBackup, BACKUP_STORES, BACKUP_MAX_BYTES } from './logic.js';
 import { $, $$, esc, toast, busy, confirmBox, openSheet, layerCount } from './ui.js';
 
-const VERSION = '6da3b7d2bd';
+const VERSION = '153b35ed8c';
 const TABS = { food, nails, edits };
 const mounted = new Set();
 let current = '';
@@ -204,7 +204,18 @@ function importBackup() {
 
 // ---------- startup ----------
 
+// If the phone's storage can't be opened, say so on the page with a way to try again, instead of a blank screen.
 async function start() {
+  try {
+    await db.keys('kv');
+  } catch (e) {
+    $('#view-food').hidden = false;
+    $('#view-food').innerHTML = `<div class="empty-state" role="alert"><div class="big">😵</div><p>${esc(e.message)}</p>
+      <p class="hint">打不开不会删掉你已存的记录，通常重开一次就好。</p><button class="btn" data-a="retry">再试一次</button></div>`;
+    $('#view-food [data-a=retry]').onclick = () => location.reload();
+    document.body.classList.add('ready');
+    return;
+  }
   ai.configure(await aiSettings());
   $('.tabs').onclick = (e) => { const b = e.target.closest('.tab'); if (b && b.dataset.tab !== current) show(b.dataset.tab); };
   // Android share target / links like ?share=<text>&to=food

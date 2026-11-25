@@ -4,17 +4,33 @@ const NAME = 'zhongcao';
 const STORES = ['food', 'nails', 'edits', 'places', 'images', 'kv'];
 let dbp = null;
 
+// A failed open is not kept: iOS sometimes refuses once (low storage, a stuck upgrade), and the next try may work.
+// The phone may also close the connection (storage cleanup); then the next call opens it again.
+function openError(e) {
+  const name = e && e.name;
+  if (name === 'QuotaExceededError') return new Error('手机存储空间不够了，清理一些空间后再试');
+  if (typeof indexedDB === 'undefined' || name === 'InvalidStateError' || name === 'SecurityError') return new Error('这个浏览器不让 App 存资料（无痕模式？），请用普通模式打开');
+  return new Error(`打不开手机里的资料，请关掉 App 再打开（${(e && e.message) || name || '未知原因'}）`);
+}
+
 function open() {
   if (dbp) return dbp;
   dbp = new Promise((resolve, reject) => {
-    const req = indexedDB.open(NAME, 1);
+    let req;
+    try { req = indexedDB.open(NAME, 1); } catch (e) { reject(openError(e)); return; }
     req.onupgradeneeded = () => {
       const db = req.result;
       for (const s of STORES) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' });
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onclose = () => { dbp = null; };
+      db.onversionchange = () => { db.close(); dbp = null; };
+      resolve(db);
+    };
+    req.onerror = () => reject(openError(req.error));
   });
+  dbp.catch(() => { dbp = null; });
   return dbp;
 }
 
